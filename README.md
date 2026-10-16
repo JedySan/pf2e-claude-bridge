@@ -82,7 +82,8 @@ Settings → Developer → **Edit Config**, в `mcpServers` добавить:
 Поднять `version` в `module/module.json` и `server/package.json`, закоммитить, затем:
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+gh release create v0.2.0 --repo JedySan/pf2e-claude-bridge --target main --generate-notes
+# или: git tag v0.2.0 && git push origin v0.2.0
 ```
 
 GitHub Actions соберёт `module.zip`, проставит версию и ссылку на архив в `module.json`

@@ -1,12 +1,19 @@
 # Публикация модуля Foundry.
-# Запушьте тег вида vX.Y.Z — workflow проставит версию и ссылку на архив
-# в module.json, соберёт module.zip и создаст релиз с обоими файлами.
+# Запустится и от пуша тега vX.Y.Z, и от релиза, созданного через `gh release create`.
+# Проставляет версию и ссылку на архив в module.json, собирает module.zip
+# и кладёт оба файла в релиз (создаёт его, если ещё нет).
 # Foundry берёт обновления по manifest: releases/latest/download/module.json
 name: Release Foundry module
 
 on:
   push:
     tags: ["v*"]
+  release:
+    types: [published]
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -32,10 +39,14 @@ jobs:
       - name: Build module.zip
         run: cd module && zip -r ../module.zip .
 
-      - name: Create release
+      - name: Publish assets
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" module/module.json module.zip \
-            --title "$TAG" --generate-notes --verify-tag
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" module/module.json module.zip --clobber
+          else
+            gh release create "$TAG" module/module.json module.zip \
+              --title "$TAG" --generate-notes --verify-tag
+          fi
