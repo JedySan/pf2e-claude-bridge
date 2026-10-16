@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.6.0" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.6.1" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -510,8 +510,33 @@ tool(
 );
 
 tool(
+  "create-chest",
+  "Создать на сцене сундук (актёр pf2e типа loot, папка «Созданные враги») в клетке col,row. " +
+  "Содержимое кладётся через add-loot или collect-loot.",
+  {
+    scene: sceneArg,
+    name: z.string().optional().describe("По умолчанию «Сундук»"),
+    col: z.number().int(),
+    row: z.number().int(),
+    hidden: z.boolean().optional().describe("Скрыть от игроков, пока не найдут"),
+    img: z.string().optional(),
+  }
+);
+
+tool(
+  "collect-loot",
+  "Собрать добычу с мобов в сундук: оружие, доспехи, снаряжение, расходники, ценности и монеты " +
+  "(природные удары не трогаются). Без from — со всех поверженных врагов на сцене.",
+  {
+    scene: sceneArg,
+    chest: z.string().describe("Токен сундука: ID или имя"),
+    from: z.array(z.string()).optional().describe("Токены мобов; пусто — все поверженные враги"),
+  }
+);
+
+tool(
   "add-loot",
-  "Положить добычу в инвентарь моба на сцене: предметы из компендиума (с переводом) и монеты. " +
+  "Положить добычу в инвентарь моба или сундука на сцене: предметы из компендиума (с переводом) и монеты. " +
   "Ориентир по ценности — таблица сокровищ GM Core для уровня партии; не больше доли от бюджета уровня на энкаунтер.",
   {
     scene: sceneArg,

@@ -1,5 +1,5 @@
 // Действия за персонажей (заклинания) и добыча для мобов.
-import { requireScene, hpOf } from "../util.js";
+import { requireScene, hpOf, cellToXY, ensureEncounterFolder } from "../util.js";
 
 /** Токены сцены по ID или имени (однозначному). */
 function findTokens(scene, refs) {
@@ -120,7 +120,62 @@ export const playHandlers = {
     return { total: out.length, results: out.slice(0, limit) };
   },
 
-  /** Положить добычу в инвентарь моба (токена): предметы из компендиума и монеты. */
+  /** Создать на сцене сундук (актёр pf2e «loot») и, при желании, сразу положить в него добычу. */
+  "create-chest": async ({ scene, name = "Сундук", col, row, hidden = false, img }) => {
+    const s = requireScene(scene);
+    const folder = await ensureEncounterFolder();
+    const actor = await Actor.implementation.create({
+      name,
+      type: "loot",
+      img: img ?? "icons/containers/chest/chest-reinforced-steel-brown.webp",
+      folder: folder.id,
+      system: { lootSheetType: "Loot", hiddenWhenEmpty: false },
+      prototypeToken: { name, actorLink: true, disposition: 0 },
+    });
+    const { x, y } = cellToXY(s, col, row);
+    const td = await actor.getTokenDocument({ x, y, hidden });
+    const [token] = await s.createEmbeddedDocuments("Token", [td.toObject()]);
+    return { chestActorId: actor.id, tokenId: token.id, name, scene: s.name, col, row, hidden: hidden || undefined };
+  },
+
+  /**
+   * Собрать добычу с мобов в сундук: переносит снаряжение, оружие, доспехи, расходники и монеты
+   * (природные удары NPC не трогает). from — токены; пусто — все поверженные враги на сцене.
+   */
+  "collect-loot": async ({ scene, chest, from = [] }) => {
+    const s = requireScene(scene);
+    const [chestToken] = findTokens(s, [chest]);
+    const target = chestToken.actor;
+    if (!target) throw new Error(`У токена «${chestToken.name}» нет актёра`);
+
+    const sources = from.length
+      ? findTokens(s, from)
+      : s.tokens.filter((t) => t.disposition === -1 && t.actor?.type === "npc" && (t.actor.system.attributes.hp?.value ?? 1) <= 0);
+    if (!sources.length) throw new Error("Не с кого собирать: нет поверженных врагов на сцене (или укажите токены явно)");
+
+    const report = [];
+    for (const t of sources) {
+      const a = t.actor;
+      if (!a || a === target) continue;
+      const loot = a.items.filter((i) => ITEM_TYPES.includes(i.type));
+      if (!loot.length) { report.push({ from: t.name, items: [] }); continue; }
+      const data = loot.map((i) => {
+        const d = i.toObject();
+        delete d._id;
+        if (d.system) {
+          d.system.equipped = { carryType: "worn", handsHeld: 0, inSlot: false };
+          delete d.system.containerId;
+        }
+        return d;
+      });
+      await target.createEmbeddedDocuments("Item", data);
+      await a.deleteEmbeddedDocuments("Item", loot.map((i) => i.id));
+      report.push({ from: t.name, items: loot.map((i) => `${i.name}${i.quantity > 1 ? ` ×${i.quantity}` : ""}`) });
+    }
+    return { chest: chestToken.name, collected: report };
+  },
+
+  /** Положить добычу в инвентарь моба или сундука: предметы из компендиума и монеты. */
   "add-loot": async ({ scene, token, items = [], coins }) => {
     const s = requireScene(scene);
     const [t] = findTokens(s, [token]);
