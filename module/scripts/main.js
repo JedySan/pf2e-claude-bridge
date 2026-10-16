@@ -6,6 +6,7 @@ import { sceneHandlers } from "./handlers/scene.js";
 import { encounterHandlers } from "./handlers/encounter.js";
 import { statusHandlers } from "./handlers/status.js";
 import { registerAutomationSettings, registerAutomationHooks } from "./automation.js";
+import { createIndicator } from "./indicator.js";
 
 const HANDLERS = { ...sceneHandlers, ...encounterHandlers, ...statusHandlers };
 const RECONNECT_MS = 5000;
@@ -49,15 +50,24 @@ Hooks.once("ready", () => {
   if (game.system.id !== "pf2e") {
     ui.notifications.warn("PF2e Claude Bridge рассчитан на систему pf2e — часть инструментов не будет работать.");
   }
+  createIndicator(() => {
+    ui.notifications.info("Claude Bridge: переподключаюсь…");
+    reconnect();
+  });
   connect();
 });
 
 // ---------- Соединение ----------
 
+let everConnected = false;
+
 function setStatus(s, note) {
   if (s === status) return;
   status = s;
-  if (s === "connected") ui.notifications.info("Claude Bridge: подключено");
+  Hooks.callAll(`${MODULE_ID}.status`, s);
+  // Уведомление — только при первом подключении и при потере связи; дальше хватает плашки.
+  if (s === "connected" && !everConnected) ui.notifications.info("Claude Bridge: подключено");
+  if (s === "connected") everConnected = true;
   if (s === "error" && note) console.warn(`[${MODULE_ID}]`, note);
 }
 
@@ -73,15 +83,20 @@ function connect() {
 
   const port = game.settings.get(MODULE_ID, "port");
   setStatus("connecting");
+  let ws;
   try {
-    socket = new WebSocket(`ws://127.0.0.1:${port}`);
+    ws = new WebSocket(`ws://127.0.0.1:${port}`);
   } catch (e) {
     setStatus("error", e.message);
     return scheduleReconnect();
   }
+  socket = ws;
+  // События старого сокета (после reconnect) не должны трогать новый.
+  const current = () => socket === ws;
 
-  socket.addEventListener("open", () => {
-    socket.send(JSON.stringify({
+  ws.addEventListener("open", () => {
+    if (!current()) return;
+    ws.send(JSON.stringify({
       type: "hello",
       secret,
       info: {
@@ -93,25 +108,28 @@ function connect() {
     }));
   });
 
-  socket.addEventListener("message", async (ev) => {
+  ws.addEventListener("message", async (ev) => {
+    if (!current()) return;
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === "welcome") return setStatus("connected");
     if (msg.type === "request") return handleRequest(msg);
   });
 
-  socket.addEventListener("close", (ev) => {
+  ws.addEventListener("close", (ev) => {
+    if (!current()) return;
     socket = null;
     if (ev.code === 4003) {
       ui.notifications.error("Claude Bridge: неверный секрет — проверьте настройки модуля.");
       return setStatus("error", "bad secret");
     }
+    if (status === "connected") ui.notifications.warn("Claude Bridge: связь потеряна, переподключаюсь…");
     setStatus("connecting");
     scheduleReconnect();
   });
 
   // Пока Claude Desktop закрыт, ошибки подключения — нормальное состояние.
-  socket.addEventListener("error", () => {});
+  ws.addEventListener("error", () => {});
 }
 
 function scheduleReconnect() {
@@ -122,7 +140,7 @@ function scheduleReconnect() {
 function reconnect() {
   if (socket) { try { socket.close(); } catch {} }
   socket = null;
-  status = "off";
+  setStatus("off");
   connect();
 }
 
