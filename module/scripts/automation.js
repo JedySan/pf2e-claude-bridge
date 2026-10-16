@@ -5,6 +5,7 @@ import { MODULE_ID } from "./util.js";
 import { ctxOf, targetsOf, originItem, actionSlug, OUTCOME_RU } from "./chat.js";
 import { setCondition, applyRollDamage, healActor } from "./pf2e-ops.js";
 import { enqueue } from "./queue.js";
+import { DEFAULT_COMBINE_ACTIONS, isCombineAction, armCombine, noteAttack, takeDamage, combinedFormula, groupByTarget } from "./combine.js";
 
 const isActiveGM = () => game.users.activeGM?.isSelf ?? game.user.isGM;
 const setting = (key) => game.settings.get(MODULE_ID, key);
@@ -74,6 +75,13 @@ export function registerAutomationSettings() {
   reg("autoDefeated", "Авто: поверженные",
     "NPC с 0 HP помечается мёртвым и поверженным в трекере боя.",
     Boolean, true);
+  reg("autoCombine", "Авто: сложение урона Ударов",
+    "Двойной разрез, Шквал ударов и т. п.: урон обоих Ударов по одной цели складывается до сопротивлений и слабостей. " +
+    "Срабатывает после карточки действия в чате (нажать на умение в листе перед атаками).",
+    Boolean, true);
+  reg("combineActions", "Действия со сложением урона",
+    "Через запятую: slug, английское или русское название умения.",
+    String, DEFAULT_COMBINE_ACTIONS);
   reg("claudeQueue", "Очередь для Claude",
     "Складывать в очередь исходы спасбросков, действия без автоматики и обращения к ассистенту — " +
     "Claude разберёт их по запросу.",
@@ -153,7 +161,16 @@ async function onChatMessage(msg) {
     }
   }
 
-  // 2. Урон.
+  // 2. Карточка действия со сложением урона (Двойной разрез и т. п.) — взводим объединение.
+  if (!ctx && !msg.rolls?.length && msg.actor && setting("autoCombine") && isCombineAction(item, setting("combineActions"))) {
+    armCombine(msg.actor, item.name);
+    return;
+  }
+
+  // 2а. Атака — учитываем для объединения урона.
+  if (ctx?.type === "attack-roll" && msg.actor) noteAttack(msg.actor, ctx.outcome, flushCombined);
+
+  // 2б. Урон.
   if (msg.isDamageRoll) return handleDamage(msg, ctx, item);
 
   // 3. Действия навыков с исходом.
@@ -202,6 +219,12 @@ async function handleDamage(msg, ctx, item) {
 
   const save = item?.system?.defense?.save;
   const rollOptions = new Set(ctx?.options ?? []);
+
+  // Удар в рамках Двойного разреза и т. п. — копим, применим суммой.
+  const isHeal = targets.some((t) => healsTarget(roll, t.actor));
+  if (!isHeal && item?.type !== "spell" && msg.actor && setting("autoCombine")
+      && takeDamage(msg.actor, { msg, roll, targets, item, rollOptions }, flushCombined)) return;
+
   for (const token of targets) {
     if (healsTarget(roll, token.actor)) {
       await healActor(token.actor, roll.total);
@@ -223,6 +246,34 @@ async function handleDamage(msg, ctx, item) {
     await applyRollDamage(token.actor, token, roll, multiplier, { item, rollOptions });
   }
   if (msg.isOwner) await msg.setFlag(MODULE_ID, "damageApplied", true);
+}
+
+/** Применить накопленный урон нескольких Ударов: по каждой цели — одной суммой. */
+function flushCombined(entries, label) {
+  (async () => {
+    const DamageRoll = CONFIG.Dice.rolls.find((r) => r.name === "DamageRoll");
+    for (const { token, entries: hits } of groupByTarget(entries)) {
+      if (!token.actor) continue;
+      if (hits.length === 1) {
+        const e = hits[0];
+        await applyRollDamage(token.actor, token, e.roll, 1, { item: e.item, rollOptions: e.rollOptions });
+        continue;
+      }
+      const formula = combinedFormula(hits.map((e) => e.roll));
+      if (!formula || !DamageRoll) continue;
+      const damage = await new DamageRoll(formula).evaluate();
+      const rollOptions = new Set(hits.flatMap((e) => [...e.rollOptions]));
+      await token.actor.applyDamage({ damage, token, item: hits[0].item, rollOptions });
+      const sum = hits.map((e) => e.roll.total).join(" + ");
+      await ChatMessage.create({
+        content: `<p><b>${label}</b>: урон по <b>${token.name}</b> сложен до сопротивлений — ${sum} = ${damage.total}</p>`,
+        whisper: ChatMessage.getWhisperRecipients("GM").map((u) => u.id),
+        speaker: { alias: setting("assistantName") },
+        flags: { [MODULE_ID]: { assistant: true } },
+      });
+    }
+    for (const e of entries) if (e.msg.isOwner) await e.msg.setFlag(MODULE_ID, "damageApplied", true);
+  })().catch((e) => console.error(`[${MODULE_ID}] сложение урона`, e));
 }
 
 async function handleAction(msg, ctx) {
