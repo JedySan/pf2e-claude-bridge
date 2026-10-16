@@ -65,9 +65,26 @@ export function registerAutomationSettings() {
     "NPC с 0 HP помечается мёртвым и поверженным в трекере боя.",
     Boolean, true);
   reg("claudeQueue", "Очередь для Claude",
-    "Складывать в очередь исходы спасбросков, действия без автоматики и сообщения с «@claude» — " +
+    "Складывать в очередь исходы спасбросков, действия без автоматики и обращения к ассистенту — " +
     "Claude разберёт их по запросу.",
     Boolean, true);
+  reg("assistantName", "Имя ассистента",
+    "Под этим именем Claude отвечает в чате игры.",
+    String, "Гриша");
+  reg("assistantTriggers", "Обращения к ассистенту",
+    "Через запятую. Сообщение в чате, начинающееся с одного из них, уходит Claude в очередь.",
+    String, "@Гриша, @claude");
+}
+
+/** Если сообщение — обращение к ассистенту, вернуть текст без обращения, иначе null. */
+function assistantRequest(text) {
+  const plain = text.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").trim();
+  const triggers = setting("assistantTriggers").split(",").map((s) => s.trim()).filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  for (const t of triggers) {
+    if (plain.toLowerCase().startsWith(t.toLowerCase())) return plain.slice(t.length).replace(/^[\s,:—-]+/, "").trim();
+  }
+  return null;
 }
 
 export function registerAutomationHooks() {
@@ -100,10 +117,22 @@ async function onChatMessage(msg) {
   const ctx = ctxOf(msg);
   const item = originItem(msg);
 
-  // 1. Вопрос к Claude.
-  if (!ctx && !msg.rolls?.length && /@claude/i.test(msg.content ?? "")) {
-    if (setting("claudeQueue")) enqueue("вопрос", { from: msg.speaker?.alias ?? msg.author?.name, text: msg.content.replace(/<[^>]+>/g, " ").trim() });
-    return;
+  // 1. Обращение к ассистенту («@Гриша …»). Свои ответы ассистента не ловим.
+  if (!ctx && !msg.rolls?.length && !msg.flags?.[MODULE_ID]?.assistant) {
+    const question = assistantRequest(msg.content ?? "");
+    if (question !== null) {
+      if (setting("claudeQueue")) {
+        enqueue("вопрос", {
+          messageId: msg.id,
+          from: msg.author?.name,
+          as: msg.speaker?.alias,
+          isGM: msg.author?.isGM || undefined,
+          whisper: msg.whisper?.length ? true : undefined,
+          text: question,
+        });
+      }
+      return;
+    }
   }
 
   // 2. Урон.

@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.3.0" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.4.0" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -388,7 +388,7 @@ tool(
 tool(
   "get-queue",
   "Очередь событий, которые автоматика модуля оставила для Claude: исходы спасбросков против " +
-  "заклинаний, урон, который нельзя применить автоматически, действия без правила, вопросы «@claude» " +
+  "заклинаний, урон, который нельзя применить автоматически, действия без правила, обращения к ассистенту («@Гриша …», с messageId для ответа через send-chat-message) " +
   "из чата. По умолчанию очередь очищается после чтения.",
   { peek: z.boolean().optional().describe("Только посмотреть, не очищая") }
 );
@@ -457,6 +457,20 @@ tool(
   "heal",
   "Восстановить HP токенам (не выше максимума).",
   { scene: sceneArg, tokens: tokensArg, amount: z.number().int().min(1) }
+);
+
+tool(
+  "send-chat-message",
+  "Написать в чат Foundry. По умолчанию — от имени ассистента (Гриша) шёпотом ГМу. " +
+  "Так отвечают на обращения «@Гриша …» из очереди. to: 'gm' — шёпотом ГМу, 'all' — всем, " +
+  "или имя игрока/его персонажа — шёпотом ему (и ГМу). as — токен на сцене, от имени которого говорить (реплика NPC).",
+  {
+    text: z.string().describe("Текст; пустая строка между абзацами"),
+    to: z.string().optional().describe("gm | all | имя игрока или персонажа; по умолчанию gm"),
+    as: z.string().optional().describe("ID или имя токена — говорить от его лица"),
+    scene: sceneArg,
+    replyTo: z.string().optional().describe("ID сообщения, на которое отвечаем (из очереди)"),
+  }
 );
 
 tool(

@@ -30,15 +30,29 @@ function tokenState(t) {
   };
 }
 
-/** slug состояния по английскому slug или русскому/локализованному названию. */
+// Частые русские синонимы, которых нет в переводе pf2e-ru.
+const CONDITION_ALIASES = {
+  "испуган": "frightened", "страх": "frightened",
+  "сбит с ног": "prone", "лежит": "prone", "лежа": "prone",
+  "застигнут": "off-guard", "врасплох": "off-guard",
+  "захвачен": "grabbed", "в захвате": "grabbed",
+  "ослабление": "enfeebled", "оглушён": "stunned", "оглушен": "stunned",
+  "обездвижен": "immobilized", "удерживаем": "restrained", "сдерживаем": "restrained",
+  "слеп": "blinded", "глух": "deafened", "тошнит": "sickened",
+};
+
+/** slug состояния по английскому slug, названию из перевода, синониму или началу слова. */
 function conditionSlug(ref) {
   const types = CONFIG.PF2E?.conditionTypes ?? {};
-  const r = ref.toLowerCase().trim();
+  const r = ref.toLowerCase().trim().replace(/\s+\d+$/, "");
   if (types[r]) return r;
-  for (const [slug, key] of Object.entries(types)) {
-    if (game.i18n.localize(key).toLowerCase() === r) return slug;
-  }
-  throw new Error(`Неизвестное состояние: ${ref}. Пример slug: frightened, prone, off-guard, grabbed, sickened, slowed, stunned`);
+  if (CONDITION_ALIASES[r]) return CONDITION_ALIASES[r];
+  const names = Object.entries(types).map(([slug, key]) => [slug, game.i18n.localize(key).toLowerCase()]);
+  const exact = names.find(([, n]) => n === r);
+  if (exact) return exact[0];
+  const prefix = names.filter(([, n]) => r.length >= 4 && (n.startsWith(r) || r.startsWith(n.slice(0, Math.max(4, n.length - 2)))));
+  if (prefix.length === 1) return prefix[0][0];
+  throw new Error(`Неизвестное состояние: ${ref}. См. list-conditions (например: frightened — Напуган, prone — Ничком)`);
 }
 
 export const statusHandlers = {
@@ -134,6 +148,34 @@ export const statusHandlers = {
       results.push({ name: t.name, ...r });
     }
     return { tokens: results };
+  },
+
+  "send-chat-message": async ({ text, to = "gm", as, scene, replyTo }) => {
+    const MODULE_ID = "pf2e-claude-bridge";
+    const name = game.settings.get(MODULE_ID, "assistantName") || "Гриша";
+    const html = text.split(/\n{2,}/).map((p) => `<p>${foundry.utils.escapeHTML?.(p) ?? p}</p>`).join("").replace(/\n/g, "<br>");
+
+    let speaker = { alias: name };
+    if (as) {
+      const s = requireScene(scene);
+      const [token] = findTokens(s, [as]);
+      speaker = ChatMessage.getSpeaker({ token, scene: s });
+    }
+
+    const data = {
+      content: html,
+      speaker,
+      flags: { [MODULE_ID]: { assistant: true, replyTo } },
+    };
+    if (to === "gm") data.whisper = ChatMessage.getWhisperRecipients("GM").map((u) => u.id);
+    else if (to !== "all") {
+      const user = game.users.getName(to) ?? game.users.find((u) => u.character?.name === to);
+      if (!user) throw new Error(`Нет игрока «${to}» — укажите имя пользователя Foundry, имя его персонажа, "gm" или "all"`);
+      data.whisper = [user.id, ...ChatMessage.getWhisperRecipients("GM").map((u) => u.id)];
+    }
+    if (!as) data.flavor = `<strong>${name}</strong>`;
+    const msg = await ChatMessage.create(data);
+    return { id: msg.id, to, speaker: speaker.alias };
   },
 
   "get-token-state": async ({ scene, tokens }) => {

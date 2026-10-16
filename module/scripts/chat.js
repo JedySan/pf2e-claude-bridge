@@ -53,7 +53,8 @@ export function summarizeMessage(msg, { raw = false } = {}) {
   const ctx = ctxOf(msg);
   const roll = msg.rolls?.[0];
   const item = originItem(msg);
-  const title = stripHtml(msg.flavor, 120).split(/ (Цель|Target|Результат|Result):/)[0] || undefined;
+  const flavor = (msg.flavor ?? "").replace(/<span class="action-glyph">.*?<\/span>/g, "");
+  const title = stripHtml(flavor, 120).split(/ (Цель|Target|Результат|Result):/)[0] || undefined;
   const out = {
     id: msg.id,
     at: new Date(msg.timestamp).toLocaleTimeString("ru-RU"),
