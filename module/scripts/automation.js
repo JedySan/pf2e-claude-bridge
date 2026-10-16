@@ -260,10 +260,19 @@ function flushCombined(entries, label) {
         continue;
       }
       const formula = combinedFormula(hits.map((e) => e.roll));
-      if (!formula || !DamageRoll) continue;
-      const damage = await new DamageRoll(formula).evaluate();
-      const rollOptions = new Set(hits.flatMap((e) => [...e.rollOptions]));
-      await token.actor.applyDamage({ damage, token, item: hits[0].item, rollOptions });
+      let damage;
+      try {
+        if (!formula || !DamageRoll) throw new Error(`не собрать формулу: ${formula}`);
+        damage = await new DamageRoll(formula).evaluate();
+        const rollOptions = new Set(hits.flatMap((e) => [...e.rollOptions]));
+        await token.actor.applyDamage({ damage, token, item: hits[0].item, rollOptions });
+      } catch (err) {
+        // Не теряем урон: применяем каждый удар отдельно и сообщаем Claude.
+        console.error(`[${MODULE_ID}] сложение урона, формула ${formula}`, err);
+        for (const e of hits) await applyRollDamage(token.actor, token, e.roll, 1, { item: e.item, rollOptions: e.rollOptions });
+        if (setting("claudeQueue")) enqueue("сложение урона не удалось", { target: token.name, label, parts: hits.map((e) => e.roll.total), formula, error: String(err?.message ?? err), note: "урон применён по отдельности" });
+        continue;
+      }
       const sum = hits.map((e) => e.roll.total).join(" + ");
       await ChatMessage.create({
         content: `<p><b>${label}</b>: урон по <b>${token.name}</b> сложен до сопротивлений — ${sum} = ${damage.total}</p>`,
