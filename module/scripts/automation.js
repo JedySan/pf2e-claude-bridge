@@ -189,8 +189,16 @@ async function handleDamage(msg, ctx, item) {
   if (mode === "off" || msg.flags?.[MODULE_ID]?.damageApplied) return;
   const roll = msg.rolls[0];
   // Лечение применяем к любым целям (обычно это герои), урон — по настройке («только NPC» / «все»).
-  const targets = targetsOf(msg).filter((t) => t.actor && (mode === "all" || npcOnly(t.actor) || healsTarget(roll, t.actor)));
-  if (!targets.length) return;
+  const all = targetsOf(msg);
+  const targets = all.filter((t) => t.actor && (mode === "all" || npcOnly(t.actor) || healsTarget(roll, t.actor)));
+  if (!targets.length) {
+    // Лечение без выделенной цели (например, Исцеление по площади) — в очередь, Claude применит по указанию ГМа.
+    const kinds = roll?.kinds instanceof Set ? roll.kinds : new Set();
+    if (!all.length && kinds.has("healing") && setting("claudeQueue")) {
+      enqueue("лечение без цели", { who: msg.speaker?.alias, item: item?.name, total: roll.total, note: "цели не выделены — скажите, кого лечить" });
+    }
+    return;
+  }
 
   const save = item?.system?.defense?.save;
   const rollOptions = new Set(ctx?.options ?? []);
