@@ -31,7 +31,17 @@ const ACTION_RULES = {
   },
 };
 
-const BASIC_SAVE_MULTIPLIER = { criticalSuccess: 0, success: 0.5, failure: 1, criticalFailure: 2 };
+// Действия, по которым Claude решать нечего (ремесло, знания, отдых, исследование…).
+const NON_COMBAT_ACTIONS = new Set([
+  "craft", "repair", "earn-income", "recall-knowledge", "identify-magic", "identify-alchemy", "learn-spell",
+  "decipher-writing", "subsist", "treat-wounds", "treat-disease", "treat-poison", "administer-first-aid",
+  "perform", "create-forgery", "gather-information", "make-an-impression", "coerce", "request", "sense-direction",
+  "track", "cover-tracks", "borrow-arcane-spell", "climb", "swim", "balance", "squeeze", "high-jump", "long-jump",
+  "force-open", "pick-a-lock", "disable-device", "palm-an-object", "steal", "conceal-an-object", "hide", "sneak",
+  "avoid-notice", "seek", "sense-motive", "overdrive", "raise-a-shield", "take-cover",
+]);
+
+const BASIC_SAVE_MULTIPLIER ={ criticalSuccess: 0, success: 0.5, failure: 1, criticalFailure: 2 };
 
 // Результаты спасбросков против заклинаний: «uuid заклинания|uuid токена» → исход.
 // Нужны, чтобы урон базового спасброска применить с правильным множителем.
@@ -192,7 +202,9 @@ async function handleAction(msg, ctx) {
   const target = targetsOf(msg)[0]?.actor;
 
   if (!rules) {
-    if (setting("claudeQueue") && target && ["criticalSuccess", "success", "criticalFailure"].includes(ctx.outcome) && !ACTION_RULES[slug]) {
+    // В очередь — только действия против другого существа и не из списка небоевых.
+    const noise = NON_COMBAT_ACTIONS.has(slug) || !target || target === self || target.id === self?.id;
+    if (setting("claudeQueue") && !noise && ["criticalSuccess", "success", "criticalFailure"].includes(ctx.outcome) && !ACTION_RULES[slug]) {
       enqueue("действие", { who: self?.name, action: slug, target: target.name, outcome: OUTCOME_RU[ctx.outcome] });
     }
     return;

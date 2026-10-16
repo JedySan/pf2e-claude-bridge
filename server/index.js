@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.4" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.6.0" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -477,6 +477,48 @@ tool(
   "get-token-state",
   "Текущее состояние токенов: HP, состояния, эффекты.",
   { scene: sceneArg, tokens: tokensArg }
+);
+
+// ---------- Заклинания за персонажей и добыча ----------
+
+tool(
+  "cast-spell",
+  "Сотворить заклинание за персонажа или NPC по целям: находит заклинание в его листе, выделяет цели " +
+  "у ГМа и отправляет карточку в чат (с расходом ячейки/использования, если есть). Спасброски NPC-целей " +
+  "бросит автоматика модуля, исходы придут в очередь. Атаку/урон из карточки бросает ГМ.",
+  {
+    scene: sceneArg,
+    caster: z.string().describe("Токен заклинателя: ID или имя на сцене"),
+    spell: z.string().describe("Название заклинания (рус. или англ., можно часть)"),
+    rank: z.number().int().min(0).max(10).optional().describe("Ранг; по умолчанию — как подготовлено"),
+    targets: z.array(z.string()).optional().describe("Токены-цели: ID или имена"),
+  }
+);
+
+tool(
+  "search-items",
+  "Поиск предметов для добычи во всех компендиумах: оружие, доспехи, снаряжение, расходники, ценности. " +
+  "Фильтры по названию, уровню, типу и редкости. Возвращает uuid для add-loot.",
+  {
+    query: z.string().optional(),
+    minLevel: z.number().int().optional(),
+    maxLevel: z.number().int().optional(),
+    types: z.array(z.enum(["weapon", "armor", "shield", "equipment", "consumable", "treasure", "backpack"])).optional(),
+    rarity: z.enum(["common", "uncommon", "rare", "unique"]).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }
+);
+
+tool(
+  "add-loot",
+  "Положить добычу в инвентарь моба на сцене: предметы из компендиума (с переводом) и монеты. " +
+  "Ориентир по ценности — таблица сокровищ GM Core для уровня партии; не больше доли от бюджета уровня на энкаунтер.",
+  {
+    scene: sceneArg,
+    token: z.string().describe("Токен моба: ID или имя"),
+    items: z.array(z.object({ uuid: z.string(), quantity: z.number().int().min(1).optional() })).optional(),
+    coins: z.object({ pp: z.number().int(), gp: z.number().int(), sp: z.number().int(), cp: z.number().int() }).partial().optional(),
+  }
 );
 
 // ---------- Кузня существ (модуль jedysan-kuznya) ----------
