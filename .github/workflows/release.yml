@@ -1,0 +1,38 @@
+# Публикация модуля Foundry.
+# Создайте релиз с тегом vX.Y.Z — workflow проставит версию и ссылку на архив
+# в module.json, соберёт module.zip и приложит оба файла к релизу.
+# Foundry берёт обновления по manifest: releases/latest/download/module.json
+name: Release Foundry module
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch module.json
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERSION="${TAG#v}"
+          jq --arg v "$VERSION" \
+             --arg d "https://github.com/$REPO/releases/download/$TAG/module.zip" \
+             '.version = $v | .download = $d' module/module.json > module.json.tmp
+          mv module.json.tmp module/module.json
+
+      - name: Build module.zip
+        run: cd module && zip -r ../module.zip .
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" module/module.json module.zip --clobber
