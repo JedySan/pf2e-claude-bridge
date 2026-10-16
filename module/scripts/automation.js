@@ -74,6 +74,10 @@ export function registerAutomationSettings() {
   reg("assistantTriggers", "Обращения к ассистенту",
     "Через запятую. Сообщение в чате, начинающееся с одного из них, уходит Claude в очередь.",
     String, "@Гриша, @claude");
+  reg("assistantAccess", "Кто может обращаться к ассистенту",
+    "Только ГМ — ответы приходят ГМу шёпотом. Все — игроки тоже могут звать ассистента, " +
+    "ответы на их вопросы видны всем; вопросы ГМа по-прежнему шёпотом.",
+    String, "gm", { gm: "Только ГМ", all: "ГМ и игроки" });
 }
 
 /** Если сообщение — обращение к ассистенту, вернуть текст без обращения, иначе null. */
@@ -121,13 +125,17 @@ async function onChatMessage(msg) {
   if (!ctx && !msg.rolls?.length && !msg.flags?.[MODULE_ID]?.assistant) {
     const question = assistantRequest(msg.content ?? "");
     if (question !== null) {
+      const fromGM = !!msg.author?.isGM;
+      // Игроки могут звать ассистента, только если ГМ это разрешил.
+      if (!fromGM && setting("assistantAccess") !== "all") return;
       if (setting("claudeQueue")) {
         enqueue("вопрос", {
           messageId: msg.id,
           from: msg.author?.name,
           as: msg.speaker?.alias,
-          isGM: msg.author?.isGM || undefined,
-          whisper: msg.whisper?.length ? true : undefined,
+          isGM: fromGM || undefined,
+          // Куда отвечать: ГМу — шёпотом, игроку — всем (так решил ГМ в настройках).
+          reply: fromGM ? "gm" : "all",
           text: question,
         });
       }

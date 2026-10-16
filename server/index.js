@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.4.1" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.4.2" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -462,7 +462,7 @@ tool(
 tool(
   "send-chat-message",
   "Написать в чат Foundry. По умолчанию — от имени ассистента (Гриша) шёпотом ГМу. " +
-  "Так отвечают на обращения «@Гриша …» из очереди. to: 'gm' — шёпотом ГМу, 'all' — всем, " +
+  "Так отвечают на обращения «@Гриша …» из очереди — в to передавайте поле reply из элемента очереди. to: 'gm' — шёпотом ГМу, 'all' — всем, " +
   "или имя игрока/его персонажа — шёпотом ему (и ГМу). as — токен на сцене, от имени которого говорить (реплика NPC).",
   {
     text: z.string().describe("Текст; пустая строка между абзацами"),
