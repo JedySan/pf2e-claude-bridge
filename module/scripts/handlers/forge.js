@@ -1,7 +1,7 @@
-// Интеграция с модулем «PF2e Кузня существ» (pf2e-creature-forge) через его API.
+// Интеграция с модулем «PF2e Кузня существ» (jedysan-kuznya) через его API.
 
 function forgeApi() {
-  const mod = game.modules.get("pf2e-creature-forge");
+  const mod = game.modules.get("jedysan-kuznya");
   if (!mod?.active) throw new Error("Модуль «PF2e Кузня существ» не установлен или не включён в мире");
   if (!mod.api) throw new Error("Кузня существ ещё загружается — повторите через пару секунд");
   return mod.api;

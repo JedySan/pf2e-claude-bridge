@@ -87,12 +87,12 @@ export function findActor(ref) {
 
 /** Общая папка с Кузней существ: если Кузня включена — её настройка, иначе «Созданные враги». */
 export function encounterFolderName() {
-  const forge = game.modules.get("pf2e-creature-forge");
+  const forge = game.modules.get("jedysan-kuznya");
   return (forge?.active && forge.api?.folderName?.()) || ENCOUNTER_FOLDER;
 }
 
 export async function ensureEncounterFolder() {
-  const forge = game.modules.get("pf2e-creature-forge");
+  const forge = game.modules.get("jedysan-kuznya");
   if (forge?.active && forge.api?.ensureFolder) return forge.api.ensureFolder();
   const name = encounterFolderName();
   let folder = game.folders.find((f) => f.type === "Actor" && f.name === name);

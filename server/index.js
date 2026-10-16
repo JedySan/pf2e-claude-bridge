@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.2" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.3" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -479,7 +479,7 @@ tool(
   { scene: sceneArg, tokens: tokensArg }
 );
 
-// ---------- Кузня существ (модуль pf2e-creature-forge) ----------
+// ---------- Кузня существ (модуль jedysan-kuznya) ----------
 
 const tier = z.union([z.enum(["extreme", "high", "moderate", "low", "terrible"]), z.number()])
   .describe("Ступень GM Core или своё число");
