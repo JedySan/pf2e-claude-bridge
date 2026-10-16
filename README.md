@@ -79,11 +79,11 @@ Settings → Developer → **Edit Config**, в `mcpServers` добавить:
 
 ## Выпуск новой версии
 
-Поднять `version` в `module/module.json` и `server/package.json`, затем:
+Поднять `version` в `module/module.json` и `server/package.json`, закоммитить, затем:
 
 ```bash
-gh release create v0.2.0 --generate-notes
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 GitHub Actions соберёт `module.zip`, проставит версию и ссылку на архив в `module.json`
-и приложит оба файла к релизу.
+и создаст релиз с обоими файлами. Foundry увидит обновление сам.
