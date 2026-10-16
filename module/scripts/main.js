@@ -1,8 +1,11 @@
 // PF2e Claude Bridge — клиентская часть.
 // Работает только у ГМа: подключается к локальному MCP-серверу по WebSocket
 // и выполняет его команды через API Foundry / pf2e.
+import { MODULE_ID } from "./util.js";
+import { sceneHandlers } from "./handlers/scene.js";
+import { encounterHandlers } from "./handlers/encounter.js";
 
-const MODULE_ID = "pf2e-claude-bridge";
+const HANDLERS = { ...sceneHandlers, ...encounterHandlers };
 const RECONNECT_MS = 5000;
 
 let socket = null;
@@ -32,6 +35,9 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
+  const mod = game.modules.get(MODULE_ID);
+  if (mod) mod.api = { status: () => status, reconnect, handlers: HANDLERS };
+
   if (!game.user.isGM) return;
   if (game.system.id !== "pf2e") {
     ui.notifications.warn("PF2e Claude Bridge рассчитан на систему pf2e — часть инструментов не будет работать.");
@@ -71,7 +77,12 @@ function connect() {
     socket.send(JSON.stringify({
       type: "hello",
       secret,
-      info: { world: game.world.title, user: game.user.name, system: game.system.id },
+      info: {
+        world: game.world.title,
+        user: game.user.name,
+        system: game.system.id,
+        moduleVersion: game.modules.get(MODULE_ID)?.version,
+      },
     }));
   });
 
@@ -92,7 +103,7 @@ function connect() {
     scheduleReconnect();
   });
 
-  // Ошибку подробно не логируем: пока Claude Desktop закрыт, это нормальное состояние.
+  // Пока Claude Desktop закрыт, ошибки подключения — нормальное состояние.
   socket.addEventListener("error", () => {});
 }
 
@@ -111,7 +122,9 @@ function reconnect() {
 async function handleRequest({ id, method, params }) {
   const reply = (payload) => socket?.readyState === 1 && socket.send(JSON.stringify({ type: "response", id, ...payload }));
   const handler = HANDLERS[method];
-  if (!handler) return reply({ ok: false, error: `Неизвестная команда: ${method}` });
+  if (!handler) {
+    return reply({ ok: false, error: `Модуль не знает команду «${method}» — обновите модуль в Foundry до версии сервера.` });
+  }
   try {
     reply({ ok: true, result: await handler(params ?? {}) });
   } catch (e) {
@@ -119,85 +132,3 @@ async function handleRequest({ id, method, params }) {
     reply({ ok: false, error: e?.message ?? String(e) });
   }
 }
-
-// ---------- Утилиты ----------
-
-function findScene(ref) {
-  if (!ref) return game.scenes.active ?? canvas.scene;
-  return game.scenes.get(ref) ?? game.scenes.getName(ref)
-    ?? game.scenes.find((s) => s.name.toLowerCase().includes(ref.toLowerCase()));
-}
-
-const DISPOSITION = { [-2]: "секрет", [-1]: "враг", 0: "нейтрал", 1: "союзник" };
-
-// Состояния pf2e с уровнем: «Испуган 2», «Ранен 1».
-function conditionsOf(actor) {
-  try {
-    const list = actor?.conditions?.active ?? [];
-    return list.map((c) => (c.value ? `${c.name} ${c.value}` : c.name));
-  } catch {
-    return [];
-  }
-}
-
-function summarizeToken(t, grid, origin) {
-  const a = t.actor;
-  const hp = a?.system?.attributes?.hp;
-  const out = {
-    id: t.id,
-    name: t.name,
-    col: Math.round((t.x - origin.x) / grid),
-    row: Math.round((t.y - origin.y) / grid),
-    size: t.width > 1 || t.height > 1 ? `${t.width}x${t.height}` : undefined,
-    side: DISPOSITION[t.disposition] ?? t.disposition,
-    hidden: t.hidden || undefined,
-    actorId: a?.id,
-    type: a?.type,
-    level: a?.level,
-    hp: hp ? `${hp.value}/${hp.max}${hp.temp ? ` (+${hp.temp} врем.)` : ""}` : undefined,
-    ac: a?.system?.attributes?.ac?.value,
-  };
-  const conds = conditionsOf(a);
-  if (conds.length) out.conditions = conds;
-  if (t.actorLink === false && a?.type === "npc" && a?.name !== t.name) out.actorName = a.name;
-  return out;
-}
-
-// ---------- Команды ----------
-
-const HANDLERS = {
-  "world-info": async () => {
-    const combat = game.combat;
-    return {
-      world: game.world.title,
-      system: `${game.system.id} ${game.system.version}`,
-      foundry: game.version,
-      activeScene: game.scenes.active ? { id: game.scenes.active.id, name: game.scenes.active.name } : null,
-      usersOnline: game.users.filter((u) => u.active).map((u) => `${u.name}${u.isGM ? " (ГМ)" : ""}`),
-      combat: combat ? { round: combat.round, started: combat.started, turn: combat.combatant?.name ?? null } : null,
-    };
-  },
-
-  "get-scene": async ({ scene }) => {
-    const s = findScene(scene);
-    if (!s) throw new Error(`Сцена не найдена: ${scene ?? "(активной нет)"}`);
-    const grid = s.grid.size;
-    const dims = s.dimensions;
-    const origin = { x: dims.sceneX, y: dims.sceneY };
-    return {
-      id: s.id,
-      name: s.name,
-      active: s.active,
-      sizeInCells: { cols: Math.round(dims.sceneWidth / grid), rows: Math.round(dims.sceneHeight / grid) },
-      feetPerCell: s.grid.distance,
-      darkness: s.environment?.darknessLevel ?? s.darkness ?? 0,
-      tokens: s.tokens.map((t) => summarizeToken(t, grid, origin)),
-    };
-  },
-};
-
-// Для отладки из консоли браузера: game.modules.get("pf2e-claude-bridge").api
-Hooks.once("ready", () => {
-  const mod = game.modules.get(MODULE_ID);
-  if (mod) mod.api = { status: () => status, reconnect, handlers: HANDLERS };
-});

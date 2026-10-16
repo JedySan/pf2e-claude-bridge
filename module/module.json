@@ -2,7 +2,7 @@
   "id": "pf2e-claude-bridge",
   "title": "PF2e Claude Bridge",
   "description": "Подключает Claude (через MCP) к миру Foundry: чтение сцены, построение энкаунтеров, ведение монстров в бою. Работает во вкладке ГМа.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "authors": [
     {
       "name": "JedySan"
@@ -26,7 +26,7 @@
   "languages": [],
   "url": "https://github.com/JedySan/pf2e-claude-bridge",
   "manifest": "https://github.com/JedySan/pf2e-claude-bridge/releases/latest/download/module.json",
-  "download": "https://github.com/JedySan/pf2e-claude-bridge/releases/download/v0.1.0/module.zip",
+  "download": "https://github.com/JedySan/pf2e-claude-bridge/releases/download/v0.2.0/module.zip",
   "readme": "https://github.com/JedySan/pf2e-claude-bridge#readme",
   "bugs": "https://github.com/JedySan/pf2e-claude-bridge/issues"
 }
