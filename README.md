@@ -168,9 +168,12 @@ Settings → Developer → **Edit Config**, в `mcpServers` добавить:
 Поднять `version` в `module/module.json` и `server/package.json`, закоммитить, затем:
 
 ```bash
-gh release create v0.2.0 --repo JedySan/pf2e-claude-bridge --target main --generate-notes
-# или: git tag v0.2.0 && git push origin v0.2.0
+cd ~/pf2e-claude-bridge && git pull && git tag v0.5.0 && git push origin v0.5.0
 ```
+
+Workflow создаст релиз уже с файлами — Foundry не увидит «пустой» релиз.
+(`gh release create` тоже работает, но первые ~минуту у релиза ещё нет `module.json`,
+и обновление в Foundry в это время выдаст «No module manifest found».)
 
 GitHub Actions соберёт `module.zip`, проставит версию и ссылку на архив в `module.json`
 и создаст релиз с обоими файлами. Foundry увидит обновление сам.
