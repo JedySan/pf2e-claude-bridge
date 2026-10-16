@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.4.2" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.1" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -477,6 +477,81 @@ tool(
   "get-token-state",
   "Текущее состояние токенов: HP, состояния, эффекты.",
   { scene: sceneArg, tokens: tokensArg }
+);
+
+// ---------- Кузня существ (модуль pf2e-creature-forge) ----------
+
+const tier = z.union([z.enum(["extreme", "high", "moderate", "low", "terrible"]), z.number()])
+  .describe("Ступень GM Core или своё число");
+const creatureSpec = z.object({
+  name: z.string(),
+  level: z.number().int().min(-1).max(24),
+  role: z.enum(["balanced", "brute", "soldier", "skirmisher", "sniper", "magicalStriker", "spellcaster", "skillParagon"])
+    .optional().describe("Шаблон по дорожным картам GM Core; явные поля ниже его перекрывают"),
+  size: z.enum(["tiny", "sm", "med", "lg", "huge", "grg"]).optional(),
+  rarity: z.enum(["common", "uncommon", "rare", "unique"]).optional(),
+  traits: z.array(z.string()).optional().describe("Трейты pf2e на английском: humanoid, undead, aquatic…"),
+  languages: z.array(z.string()).optional(),
+  senses: z.array(z.string()).optional().describe("darkvision, low-light-vision, scent 30, tremorsense 60…"),
+  description: z.string().optional(),
+  attributes: z.object({ str: tier, dex: tier, con: tier, int: tier, wis: tier, cha: tier }).partial().optional(),
+  perception: tier.optional(),
+  ac: tier.optional(),
+  hp: z.union([z.enum(["high", "moderate", "low"]), z.number()]).optional(),
+  saves: z.object({ fortitude: tier, reflex: tier, will: tier }).partial().optional(),
+  skills: z.array(z.object({ slug: z.string().describe("athletics, stealth, arcana…"), tier })).optional(),
+  speed: z.object({ land: z.number(), fly: z.number(), swim: z.number(), climb: z.number(), burrow: z.number() }).partial().optional(),
+  strikes: z.array(z.object({
+    name: z.string(),
+    ranged: z.boolean().optional(),
+    range: z.number().optional().describe("Шаг дистанции, фт"),
+    damageType: z.string().describe("slashing, piercing, bludgeoning, fire, cold, acid, poison, mental…"),
+    attack: tier,
+    damage: z.string().describe("Ступень (extreme|high|moderate|low) или формула «2d8+6»"),
+    traits: z.array(z.string()).optional().describe("agile, reach-10, finesse, deadly-d10, magical…"),
+    extra: z.string().optional().describe("Доп. урон: «1d6 fire», «1d4 persistent bleed»"),
+  })).optional(),
+  spellcasting: z.object({
+    tradition: z.enum(["arcane", "divine", "occult", "primal"]),
+    type: z.enum(["innate", "prepared", "spontaneous"]),
+    tier: z.enum(["extreme", "high", "moderate"]),
+    attribute: z.enum(["int", "wis", "cha"]).optional(),
+    spells: z.array(z.object({ name: z.string().describe("Название (англ. или рус.)"), rank: z.number().int().min(0).max(10).optional() })),
+  }).nullable().optional(),
+  iwr: z.array(z.object({
+    kind: z.enum(["immunity", "weakness", "resistance"]),
+    type: z.string(),
+    value: z.union([z.enum(["max", "min"]), z.number()]).optional().describe("max — узкое, min — широкое; для иммунитета не нужно"),
+  })).optional(),
+  abilities: z.array(z.object({ name: z.string() })).optional()
+    .describe("Способности из компендиумов pf2e по названию: Grab, Reactive Strike, Knockdown, Regeneration, Ferocity…"),
+});
+
+tool(
+  "forge-roles",
+  "Роли-шаблоны Кузни существ (дорожные карты GM Core) с кратким описанием.",
+  {}
+);
+
+tool(
+  "forge-preview",
+  "Посчитать числа существа по таблицам GM Core без создания: характеристики, КБ, HP, спасброски, " +
+  "удары, КС заклинаний, сопротивления и предупреждения о балансе. Используйте, чтобы проверить задумку.",
+  { spec: creatureSpec }
+);
+
+tool(
+  "forge-open",
+  "Открыть у ГМа мастер Кузни существ с готовой заготовкой. ГМ проверит, поправит и создаст сам. " +
+  "Предпочтительный способ: ГМ сохраняет контроль.",
+  { spec: creatureSpec }
+);
+
+tool(
+  "forge-create",
+  "Сразу создать существо в мире (папка «Кузня существ») и открыть его лист. Используйте, когда ГМ " +
+  "явно попросил создать без проверки. Возвращает actorId для place-tokens.",
+  { spec: creatureSpec }
 );
 
 await mcp.connect(new StdioServerTransport());
