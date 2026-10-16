@@ -44,6 +44,15 @@ export const forgeHandlers = {
     return { opened: true, note: "Мастер открыт у ГМа с заготовкой — ГМ проверит и нажмёт «Создать»" };
   },
 
+  "forge-rescale": async ({ actorId, level, copy = false }) => {
+    const api = forgeApi();
+    if (!api.rescale) throw new Error("Обновите Кузню существ до версии со сменой уровня");
+    const actor = game.actors.get(actorId) ?? game.actors.getName(actorId);
+    if (!actor) throw new Error(`Актёр не найден: ${actorId}`);
+    const r = await api.rescale(actor, level, { copy });
+    return { actorId: r.actor.id, name: r.actor.name, from: r.from, to: r.to, changes: r.changes };
+  },
+
   "forge-create": async ({ spec }) => {
     const api = forgeApi();
     const { actor, stats, warnings, missing } = await api.create(withRole(api, spec), { openSheet: true });

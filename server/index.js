@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.3" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.4" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -545,6 +545,19 @@ tool(
   "Открыть у ГМа мастер Кузни существ с готовой заготовкой. ГМ проверит, поправит и создаст сам. " +
   "Предпочтительный способ: ГМ сохраняет контроль.",
   { spec: creatureSpec }
+);
+
+tool(
+  "forge-rescale",
+  "Перевести готового NPC (любого, не только из Кузни) на другой уровень по таблицам GM Core: " +
+  "каждая характеристика сохраняет ступень и ручные поправки; атаки, урон, КС заклинаний, " +
+  "сопротивления пересчитываются. copy=true — создать копию, оригинал не трогать. " +
+  "Все токены этого актёра на сценах тоже получат новые числа.",
+  {
+    actorId: z.string().describe("ID или точное имя актёра мира"),
+    level: z.number().int().min(-1).max(24),
+    copy: z.boolean().optional(),
+  }
 );
 
 tool(
