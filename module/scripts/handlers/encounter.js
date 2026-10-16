@@ -50,7 +50,9 @@ function partyFromWorld() {
 function speedsOf(actor) {
   const sp = actor.system?.movement?.speeds;
   if (sp) {
-    return Object.values(sp).filter((s) => s && s.value).map((s) => `${s.type === "land" ? "" : s.type + " "}${s.value}`).join(", ");
+    return Object.values(sp)
+      .filter((s) => s && s.value && s.type !== "travel")
+      .map((s) => `${s.type === "land" ? "" : s.type + " "}${s.value}`).join(", ");
   }
   const old = actor.system?.attributes?.speed;
   if (!old) return undefined;
@@ -86,6 +88,12 @@ function strikesOf(actor) {
 
 const ACTION_GLYPH = { reaction: "⟲", free: "◇", passive: "пассив" };
 
+/** Описания некоторых способностей — ключи локализации (PF2E.NPC.Abilities.Glossary.Wavesense). */
+function localizeKeys(text) {
+  if (!text) return text;
+  return String(text).replace(/PF2E\.[A-Za-z0-9.]+/g, (k) => (game.i18n.has(k) ? game.i18n.localize(k) : k));
+}
+
 function abilitiesOf(actor, descMax) {
   return actor.itemTypes.action.map((i) => {
     const t = i.system.actionType?.value;
@@ -95,7 +103,7 @@ function abilitiesOf(actor, descMax) {
       name: i.name,
       cost,
       traits: traits.length ? traits.join(", ") : undefined,
-      text: descMax === 0 ? undefined : stripHtml(i.system.description?.value, descMax) || undefined,
+      text: descMax === 0 ? undefined : stripHtml(localizeKeys(i.system.description?.value), descMax) || undefined,
     };
   });
 }
@@ -121,9 +129,14 @@ function spellsOf(actor) {
 
 function skillsOf(actor) {
   const sk = actor.system?.skills ?? {};
+  // У NPC в исходных данных перечислены только навыки из стат-блока — остальное система
+  // достраивает от характеристик. Показываем только их. У героев — с рангом > 0.
+  const listed = actor.type === "npc" ? new Set(Object.keys(actor._source?.system?.skills ?? {})) : null;
   const out = {};
   for (const [slug, s] of Object.entries(sk)) {
     if (s?.visible === false) continue;
+    if (listed?.size && !listed.has(slug) && !s?.lore) continue;
+    if (!listed && actor.type === "character" && !(s?.rank > 0)) continue;
     const mod = s?.mod ?? s?.totalModifier ?? s?.base ?? s?.value;
     if (typeof mod === "number") out[s.label ?? slug] = mod;
   }
@@ -150,7 +163,11 @@ export function statBlock(actor, { descMax = 200 } = {}) {
       will: saves.will?.mod ?? sys.saves?.will?.value,
     },
     perception: actor.perception?.mod ?? sys.perception?.mod,
-    senses: (sys.perception?.senses ?? []).map((s) => (s.range ? `${s.type} ${s.range}` : s.type)),
+    senses: (sys.perception?.senses ?? []).map((s) => {
+      const label = s.label ?? s.type;
+      const ranged = Number.isFinite(s.range) && s.range > 0 && !String(label).includes(String(s.range));
+      return ranged ? `${label} ${s.range} фт` : label;
+    }),
     speed: speedsOf(actor),
     ...iwrOf(actor),
     skills: skillsOf(actor),

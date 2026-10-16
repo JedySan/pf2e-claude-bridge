@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.2.1" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.3.0" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -367,6 +367,102 @@ tool(
       count: z.number().int().min(1).optional(),
     })).optional().describe("Гипотетический состав для расчёта до создания"),
   }
+);
+
+// ---------- Чат, очередь, статусы ----------
+
+const tokensArg = z.array(z.string()).min(1)
+  .describe("ID токенов (из get-scene) или их имена на сцене; имя должно быть однозначным");
+
+tool(
+  "get-chat",
+  "Новые сообщения чата Foundry с прошлой проверки в сжатом виде: кто, что (атака, спасбросок, " +
+  "действие, урон), итог броска, КС, степень успеха, цели. all=true — последние limit сообщений.",
+  {
+    limit: z.number().int().min(1).max(100).optional().describe("По умолчанию 20"),
+    all: z.boolean().optional(),
+    raw: z.boolean().optional().describe("Добавить сырой контекст pf2e (для отладки)"),
+  }
+);
+
+tool(
+  "get-queue",
+  "Очередь событий, которые автоматика модуля оставила для Claude: исходы спасбросков против " +
+  "заклинаний, урон, который нельзя применить автоматически, действия без правила, вопросы «@claude» " +
+  "из чата. По умолчанию очередь очищается после чтения.",
+  { peek: z.boolean().optional().describe("Только посмотреть, не очищая") }
+);
+
+tool(
+  "list-conditions",
+  "Список состояний pf2e: slug и название на языке мира.",
+  {}
+);
+
+tool(
+  "set-condition",
+  "Наложить, изменить или снять состояние pf2e на токенах. value: число — точное значение " +
+  "(Испуган 2), не указано — просто наложить, 0 — снять.",
+  {
+    scene: sceneArg,
+    tokens: tokensArg,
+    condition: z.string().describe("slug (frightened, prone, off-guard…) или русское название"),
+    value: z.number().int().min(0).optional(),
+  }
+);
+
+tool(
+  "search-effects",
+  "Поиск эффектов pf2e (эффекты заклинаний, эликсиров, способностей, аур) по названию " +
+  "в мире и компендиумах. Возвращает uuid для apply-effect.",
+  {
+    query: z.string(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }
+);
+
+tool(
+  "apply-effect",
+  "Наложить эффект pf2e на токены. Можно задать свою длительность.",
+  {
+    scene: sceneArg,
+    tokens: tokensArg,
+    uuid: z.string().describe("uuid из search-effects"),
+    duration: z.object({
+      value: z.number().int(),
+      unit: z.enum(["rounds", "minutes", "hours", "days", "unlimited", "encounter"]),
+    }).optional(),
+  }
+);
+
+tool(
+  "remove-effect",
+  "Снять эффекты с токенов по части названия или ID эффекта.",
+  { scene: sceneArg, tokens: tokensArg, name: z.string() }
+);
+
+tool(
+  "apply-damage",
+  "Нанести урон токенам. С типом урона (fire, slashing, mental…) pf2e учтёт сопротивления, " +
+  "слабости и иммунитеты; без типа — урон как есть.",
+  {
+    scene: sceneArg,
+    tokens: tokensArg,
+    amount: z.number().int().min(1),
+    type: z.string().optional(),
+  }
+);
+
+tool(
+  "heal",
+  "Восстановить HP токенам (не выше максимума).",
+  { scene: sceneArg, tokens: tokensArg, amount: z.number().int().min(1) }
+);
+
+tool(
+  "get-token-state",
+  "Текущее состояние токенов: HP, состояния, эффекты.",
+  { scene: sceneArg, tokens: tokensArg }
 );
 
 await mcp.connect(new StdioServerTransport());

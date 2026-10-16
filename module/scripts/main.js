@@ -4,8 +4,10 @@
 import { MODULE_ID } from "./util.js";
 import { sceneHandlers } from "./handlers/scene.js";
 import { encounterHandlers } from "./handlers/encounter.js";
+import { statusHandlers } from "./handlers/status.js";
+import { registerAutomationSettings, registerAutomationHooks } from "./automation.js";
 
-const HANDLERS = { ...sceneHandlers, ...encounterHandlers };
+const HANDLERS = { ...sceneHandlers, ...encounterHandlers, ...statusHandlers };
 const RECONNECT_MS = 5000;
 
 let socket = null;
@@ -32,6 +34,11 @@ Hooks.once("init", () => {
     scope: "client", config: true, type: Boolean, default: true,
     onChange: () => reconnect(),
   });
+
+  // Автоматика работает и без подключения к Claude — регистрируем у всех клиентов,
+  // но применяет эффекты только активный ГМ.
+  registerAutomationSettings();
+  registerAutomationHooks();
 });
 
 Hooks.once("ready", () => {

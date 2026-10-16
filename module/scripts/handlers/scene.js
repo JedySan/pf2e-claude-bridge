@@ -22,6 +22,8 @@ function summarizeToken(t, scene) {
   };
   const conds = conditionsOf(a);
   if (conds.length) out.conditions = conds;
+  const effects = (a?.itemTypes?.effect ?? []).map((e) => e.name);
+  if (effects.length) out.effects = effects;
   if (a && a.name !== t.name) out.actorName = a.name;
   return out;
 }
