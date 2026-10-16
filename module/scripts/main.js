@@ -55,6 +55,10 @@ Hooks.once("ready", () => {
   createIndicator(() => {
     ui.notifications.info("Claude Bridge: переподключаюсь…");
     reconnect();
+  }, (on) => {
+    // Тот же флаг, что «Подключаться к Claude» в настройках: onChange сам переподключит или отключит.
+    game.settings.set(MODULE_ID, "enabled", on);
+    ui.notifications.info(on ? "Claude Bridge: связь включена" : "Claude Bridge: связь выключена — автоматика работает дальше");
   });
   connect();
 });

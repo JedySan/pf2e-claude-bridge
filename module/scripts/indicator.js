@@ -3,14 +3,14 @@
 //   ● жёлтая  — подключаемся (Claude Desktop закрыт или перезапускается)
 //   ● красная — неверный секрет
 //   ● серая   — отключено в настройках
-// Справа — сколько событий ждёт в очереди для Claude. Клик — переподключиться.
+// Справа — сколько событий ждёт в очереди для Claude, кнопка ⏻ — вкл/выкл связь. Клик по плашке — переподключиться.
 import { MODULE_ID } from "./util.js";
 
 const STATES = {
   connected: { color: "#3fb950", text: "на связи" },
   connecting: { color: "#d29922", text: "нет связи — откройте Claude Desktop" },
   error: { color: "#f85149", text: "неверный секрет — проверьте настройки модуля" },
-  off: { color: "#6e7681", text: "отключён в настройках" },
+  off: { color: "#6e7681", text: "связь выключена — ⏻ чтобы включить" },
 };
 
 let el = null;
@@ -34,6 +34,11 @@ const STYLE = `
   background: #8957e5; color: #fff; font-weight: 600;
 }
 #pf2e-claude-indicator .queue.empty { display: none; }
+#pf2e-claude-indicator .power {
+  margin-left: 2px; padding: 0 3px; border-radius: 6px; opacity: 0.6; font-size: 13px;
+}
+#pf2e-claude-indicator .power:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+#pf2e-claude-indicator.off > span:not(.power) { opacity: 0.55; }
 @keyframes pf2e-claude-pulse { 50% { opacity: 0.35; } }
 `;
 
@@ -46,20 +51,26 @@ function render() {
   const s = STATES[state] ?? STATES.off;
   el.innerHTML = `<span class="dot${state === "connecting" ? " pulse" : ""}" style="background:${s.color}"></span>`
     + `<span>${name()}</span>`
-    + `<span class="queue${queued ? "" : " empty"}">${queued}</span>`;
+    + `<span class="queue${queued ? "" : " empty"}">${queued}</span>`
+    + `<span class="power" title="${state === "off" ? "Включить связь с Claude" : "Выключить связь с Claude"}">⏻</span>`;
+  el.classList.toggle("off", state === "off");
   el.title = `${name()}: ${s.text}`
     + (queued ? `\nВ очереди: ${queued} — напишите Claude «очередь»` : "")
-    + `\nКлик — переподключиться`;
+    + (state === "off" ? "" : `\nКлик — переподключиться, ⏻ — выключить`);
 }
 
-export function createIndicator(onClick) {
+export function createIndicator(onClick, onToggle) {
   if (!game.user.isGM || el) return;
   const style = document.createElement("style");
   style.textContent = STYLE;
   document.head.append(style);
   el = document.createElement("div");
   el.id = "pf2e-claude-indicator";
-  el.addEventListener("click", () => onClick?.());
+  el.addEventListener("click", (ev) => {
+    if (ev.target.closest(".power")) return onToggle?.(state === "off");
+    if (state === "off") return onToggle?.(true);
+    onClick?.();
+  });
   document.body.append(el);
   render();
 
