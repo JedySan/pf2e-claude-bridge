@@ -3,7 +3,7 @@
 // Каждая функция включается/выключается в настройках модуля.
 import { MODULE_ID } from "./util.js";
 import { ctxOf, targetsOf, originItem, actionSlug, OUTCOME_RU } from "./chat.js";
-import { setCondition, applyRollDamage } from "./pf2e-ops.js";
+import { setCondition, applyRollDamage, healActor } from "./pf2e-ops.js";
 import { enqueue } from "./queue.js";
 
 const isActiveGM = () => game.users.activeGM?.isSelf ?? game.user.isGM;
@@ -62,7 +62,7 @@ export function registerAutomationSettings() {
     game.settings.register(MODULE_ID, key, { name, hint, scope: "world", config: true, type, default: def, choices });
 
   reg("autoDamage", "Авто: урон по целям",
-    "Применять урон из карточки урона к выбранным целям (с учётом сопротивлений/слабостей). " +
+    "Применять урон из карточки урона к выбранным целям (с учётом сопротивлений/слабостей). Лечение распознаётся и лечит любые цели. " +
     "Для заклинаний с базовым спасброском — с множителем по результату спасброска цели.",
     String, "npc", { off: "Выключено", npc: "Только по NPC", all: "По всем целям" });
   reg("autoActionConditions", "Авто: состояния от действий",
@@ -166,16 +166,39 @@ async function onChatMessage(msg) {
   if (!ctx && !msg.rolls?.length && item?.type === "spell") return handleSpellCast(msg, item);
 }
 
+/**
+ * Лечит ли этот бросок данную цель.
+ * pf2e помечает броски видом: «damage» и/или «healing». Чистое лечение — лечит всех.
+ * Смешанные (Исцеление/Вред): жизненная сила лечит живых и ранит нежить, пустота — наоборот.
+ */
+export function healsTarget(roll, actor) {
+  const kinds = roll?.kinds instanceof Set ? roll.kinds : new Set(roll?.options?.kinds ?? ["damage"]);
+  const healing = kinds.has("healing");
+  const damage = kinds.has("damage");
+  if (!healing) return false;
+  if (!damage) return true;
+  const undead = !!actor?.system?.attributes?.hp?.negativeHealing;
+  const type = roll.instances?.[0]?.type;
+  if (type === "vitality") return !undead;
+  if (type === "void") return undead;
+  return false;
+}
+
 async function handleDamage(msg, ctx, item) {
   const mode = setting("autoDamage");
   if (mode === "off" || msg.flags?.[MODULE_ID]?.damageApplied) return;
   const roll = msg.rolls[0];
-  const targets = targetsOf(msg).filter((t) => t.actor && (mode === "all" || npcOnly(t.actor)));
+  // Лечение применяем к любым целям (обычно это герои), урон — по настройке («только NPC» / «все»).
+  const targets = targetsOf(msg).filter((t) => t.actor && (mode === "all" || npcOnly(t.actor) || healsTarget(roll, t.actor)));
   if (!targets.length) return;
 
   const save = item?.system?.defense?.save;
   const rollOptions = new Set(ctx?.options ?? []);
   for (const token of targets) {
+    if (healsTarget(roll, token.actor)) {
+      await healActor(token.actor, roll.total);
+      continue;
+    }
     let multiplier = 1;
     if (item?.type === "spell" && save?.statistic) {
       const outcome = recallSave(item.uuid, token.uuid);
