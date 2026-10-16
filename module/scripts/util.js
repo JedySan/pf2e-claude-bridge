@@ -1,7 +1,7 @@
 // Общие утилиты модуля.
 
 export const MODULE_ID = "pf2e-claude-bridge";
-export const ENCOUNTER_FOLDER = "Claude — энкаунтеры";
+export const ENCOUNTER_FOLDER = "Созданные враги";
 
 const getProp = (obj, path) => foundry.utils.getProperty(obj, path);
 export { getProp };
@@ -85,8 +85,17 @@ export function findActor(ref) {
   return game.actors.get(ref) ?? game.actors.getName(ref) ?? null;
 }
 
+/** Общая папка с Кузней существ: если Кузня включена — её настройка, иначе «Созданные враги». */
+export function encounterFolderName() {
+  const forge = game.modules.get("pf2e-creature-forge");
+  return (forge?.active && forge.api?.folderName?.()) || ENCOUNTER_FOLDER;
+}
+
 export async function ensureEncounterFolder() {
-  let folder = game.folders.find((f) => f.type === "Actor" && f.name === ENCOUNTER_FOLDER);
-  if (!folder) folder = await Folder.create({ name: ENCOUNTER_FOLDER, type: "Actor", color: "#4a2d6b" });
+  const forge = game.modules.get("pf2e-creature-forge");
+  if (forge?.active && forge.api?.ensureFolder) return forge.api.ensureFolder();
+  const name = encounterFolderName();
+  let folder = game.folders.find((f) => f.type === "Actor" && f.name === name);
+  if (!folder) folder = await Folder.create({ name, type: "Actor", color: "#7a3b12" });
   return folder;
 }

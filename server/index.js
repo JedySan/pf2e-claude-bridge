@@ -201,7 +201,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.1" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.5.2" });
 
 const asText = (data) => ({
   content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
@@ -326,7 +326,7 @@ tool(
 
 tool(
   "import-actor",
-  "Импортировать монстра из компендиума в мир (папка «Claude — энкаунтеры»), при желании " +
+  "Импортировать монстра из компендиума в мир (папка «Созданные враги»), при желании " +
   "с шаблоном Elite (+1 уровень) или Weak (−1 уровень) и в нескольких копиях. Возвращает ID актёров для place-tokens.",
   {
     uuid: z.string().describe("uuid из search-compendium"),
@@ -338,7 +338,7 @@ tool(
 
 tool(
   "list-actors",
-  "Список актёров мира с фильтрами. folder='encounter' — только созданные Claude для энкаунтеров.",
+  "Список актёров мира с фильтрами. folder='encounter' — только из папки «Созданные враги».",
   {
     query: z.string().optional(),
     type: z.enum(["npc", "character", "hazard", "vehicle", "familiar", "party", "loot"]).optional(),

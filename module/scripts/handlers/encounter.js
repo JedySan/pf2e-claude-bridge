@@ -1,6 +1,6 @@
 // Компендиумы, актёры и бюджет энкаунтера.
 import {
-  getProp, findActor, requireScene, stripHtml, hpOf, conditionsOf, ensureEncounterFolder, ENCOUNTER_FOLDER,
+  getProp, findActor, requireScene, stripHtml, hpOf, conditionsOf, ensureEncounterFolder, encounterFolderName,
 } from "../util.js";
 
 // ---------- Бюджет XP (Pathfinder 2e, GM Core) ----------
@@ -243,12 +243,12 @@ export const encounterHandlers = {
       }
       created.push({ id: actor.id, name: actor.name, level: actor.level, hp: hpOf(actor), ac: actor.system.attributes.ac?.value });
     }
-    return { folder: ENCOUNTER_FOLDER, created };
+    return { folder: folder.name, created };
   },
 
   "list-actors": async ({ query, type, folder }) => {
     const q = query?.toLowerCase();
-    const f = folder === "encounter" ? game.folders.find((x) => x.type === "Actor" && x.name === ENCOUNTER_FOLDER) : null;
+    const f = folder === "encounter" ? game.folders.find((x) => x.type === "Actor" && x.name === encounterFolderName()) : null;
     return game.actors
       .filter((a) => (!type || a.type === type) && (!q || a.name.toLowerCase().includes(q)) && (!f || a.folder?.id === f.id))
       .map((a) => ({ id: a.id, name: a.name, type: a.type, level: a.level, folder: a.folder?.name }));
