@@ -607,8 +607,14 @@ const creatureSpec = z.object({
     type: z.string(),
     value: z.union([z.enum(["max", "min"]), z.number()]).optional().describe("max — узкое, min — широкое; для иммунитета не нужно"),
   })).optional(),
-  abilities: z.array(z.object({ name: z.string() })).optional()
-    .describe("Способности из компендиумов pf2e по названию: Grab, Reactive Strike, Knockdown, Regeneration, Ferocity…"),
+  abilities: z.array(z.object({
+    name: z.string(),
+    custom: z.boolean().optional().describe("true — своя способность (не из компендиума)"),
+    actions: z.enum(["passive", "free", "reaction", "1", "2", "3"]).optional(),
+    traits: z.array(z.string()).optional().describe("Трейты pf2e (ключи): aura, emotion, fear, mental, water… Для своих способностей указывайте всегда"),
+    description: z.string().optional().describe("Текст своей способности (по-русски)"),
+  })).optional()
+    .describe("Способности: из компендиумов pf2e по названию (Grab, Reactive Strike, Knockdown…) или свои — custom:true, с actions, traits и description."),
 });
 
 tool(
