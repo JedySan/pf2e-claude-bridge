@@ -192,6 +192,9 @@ Claude собирает существо по описанию по таблиц
 
 Поднять `version` в `module/module.json` и `server/package.json`, закоммитить, затем:
 
+Достаточно запушить в main коммит с новой `version` — workflow сам создаст тег и релиз.
+Можно и по-старому, тегом:
+
 ```bash
 cd ~/pf2e-claude-bridge && git pull && git tag vX.Y.Z && git push origin vX.Y.Z
 ```

@@ -1,5 +1,6 @@
 # Публикация модуля Foundry.
-# Запустится и от пуша тега vX.Y.Z, и от релиза, созданного через `gh release create`.
+# Запустится от пуша тега vX.Y.Z, от релиза, созданного через `gh release create`,
+# и от пуша в main, где поднята version в module/module.json (тег и релиз создаются сами).
 # Проставляет версию и ссылку на архив в module.json, собирает module.zip
 # и кладёт оба файла в релиз (создаёт его, если ещё нет).
 # Foundry берёт обновления по manifest: releases/latest/download/module.json
@@ -8,11 +9,13 @@ name: Release Foundry module
 on:
   push:
     tags: ["v*"]
+    branches: [main]
+    paths: [module/module.json, .github/workflows/**]
   release:
     types: [published]
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ github.ref_name }}-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -24,9 +27,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch module.json
+      - name: Resolve tag
+        id: tag
         env:
-          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then TAG="${{ github.ref_name }}"
+          else TAG="v$(jq -r .version module/module.json)"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # Пуш в main без новой версии — релиз уже есть, ничего не делаем.
+          if [ "${{ github.ref_type }}" != "tag" ] && [ "${{ github.event_name }}" = "push" ] && gh release view "$TAG" >/dev/null 2>&1; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Patch module.json
+        if: steps.tag.outputs.skip != '1'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
           VERSION="${TAG#v}"
@@ -37,16 +54,18 @@ jobs:
           cat module/module.json
 
       - name: Build module.zip
+        if: steps.tag.outputs.skip != '1'
         run: cd module && zip -r ../module.zip .
 
       - name: Publish assets
+        if: steps.tag.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" module/module.json module.zip --clobber
           else
             gh release create "$TAG" module/module.json module.zip \
-              --title "$TAG" --generate-notes --verify-tag
+              --title "$TAG" --generate-notes --target "${{ github.sha }}"
           fi
