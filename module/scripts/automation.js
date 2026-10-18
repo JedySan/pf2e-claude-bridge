@@ -4,6 +4,7 @@
 import { MODULE_ID } from "./util.js";
 import { ctxOf, targetsOf, originItem, actionSlug, OUTCOME_RU } from "./chat.js";
 import { setCondition, applyRollDamage, healActor } from "./pf2e-ops.js";
+import { undoGroup, track } from "./undo.js";
 import { enqueue } from "./queue.js";
 import { DEFAULT_COMBINE_ACTIONS, isCombineAction, armCombine, noteAttack, takeDamage, combinedFormula, groupByTarget } from "./combine.js";
 
@@ -171,10 +172,11 @@ async function onChatMessage(msg) {
   if (ctx?.type === "attack-roll" && msg.actor) noteAttack(msg.actor, ctx.outcome, flushCombined);
 
   // 2б. Урон.
-  if (msg.isDamageRoll) return handleDamage(msg, ctx, item);
+  const who = msg.speaker?.alias ?? "?";
+  if (msg.isDamageRoll) return undoGroup(`${who}: ${item?.name ?? "урон"}`, () => handleDamage(msg, ctx, item), { messageId: msg.id });
 
   // 3. Действия навыков с исходом.
-  if (ctx?.type === "skill-check" && ctx.outcome) return handleAction(msg, ctx);
+  if (ctx?.type === "skill-check" && ctx.outcome) return undoGroup(`${who}: ${actionSlug(msg) ?? "действие"}`, () => handleAction(msg, ctx), { messageId: msg.id });
 
   // 4. Результат спасброска.
   if (ctx?.type === "saving-throw" && ctx.outcome) return handleSave(msg, ctx, item);
@@ -250,10 +252,11 @@ async function handleDamage(msg, ctx, item) {
 
 /** Применить накопленный урон нескольких Ударов: по каждой цели — одной суммой. */
 function flushCombined(entries, label) {
-  (async () => {
+  undoGroup(`${label}: сложение урона`, async () => {
     const DamageRoll = CONFIG.Dice.rolls.find((r) => r.name === "DamageRoll");
     for (const { token, entries: hits } of groupByTarget(entries)) {
       if (!token.actor) continue;
+      track(token.actor);
       if (hits.length === 1) {
         const e = hits[0];
         await applyRollDamage(token.actor, token, e.roll, 1, { item: e.item, rollOptions: e.rollOptions });
@@ -282,7 +285,7 @@ function flushCombined(entries, label) {
       });
     }
     for (const e of entries) if (e.msg.isOwner) await e.msg.setFlag(MODULE_ID, "damageApplied", true);
-  })().catch((e) => console.error(`[${MODULE_ID}] сложение урона`, e));
+  }, { messageId: entries.map((e) => e.msg.id) }).catch((e) => console.error(`[${MODULE_ID}] сложение урона`, e));
 }
 
 async function handleAction(msg, ctx) {
@@ -321,14 +324,22 @@ async function handleSave(msg, ctx, item) {
 
 async function handleSpellCast(msg, spell) {
   if (!setting("autoNpcSaves")) return;
+  return rollTargetSaves(msg, spell);
+}
+
+/** Бросить спасброски NPC-целей против заклинания из карточки. Возвращает число бросков. */
+export async function rollTargetSaves(msg, spell) {
   const save = spell.system?.defense?.save;
   if (!save?.statistic) return;
   const dc = spell.spellcasting?.statistic?.dc?.value;
   if (!dc) return;
   const targets = targetsOf(msg).filter((t) => t.actor && npcOnly(t.actor));
+  let n = 0;
   for (const token of targets) {
     const stat = token.actor.saves?.[save.statistic];
     if (!stat) continue;
     await stat.roll({ dc: { value: dc }, item: spell, origin: spell.actor, skipDialog: true });
+    n += 1;
   }
+  return n;
 }

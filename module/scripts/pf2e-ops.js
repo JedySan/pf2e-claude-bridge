@@ -1,5 +1,7 @@
 // Операции над актёрами pf2e: состояния, эффекты, урон, лечение.
 // Используются и инструментами Claude, и автоматикой.
+// Перед каждым изменением актёра — track(): так операцию можно отменить (undo.js).
+import { track } from "./undo.js";
 
 /** Найти состояние на актёре по slug. */
 export function getCondition(actor, slug) {
@@ -13,6 +15,7 @@ export function getCondition(actor, slug) {
  */
 export async function setCondition(actor, slug, value = true, { atLeast = false } = {}) {
   if (!actor?.increaseCondition) throw new Error(`${actor?.name ?? "?"}: актёр не поддерживает состояния pf2e`);
+  track(actor);
   let cond = getCondition(actor, slug);
 
   if (value === 0 || value === false) {
@@ -45,6 +48,7 @@ function DamageRollClass() {
  * token — TokenDocument (нужен pf2e для правильного синтетического актёра и сообщения).
  */
 export async function damageActor(actor, token, amount, type, { item, rollOptions } = {}) {
+  track(actor);
   let damage = amount;
   if (type) {
     const DamageRoll = DamageRollClass();
@@ -58,6 +62,7 @@ export async function damageActor(actor, token, amount, type, { item, rollOption
 }
 
 export async function healActor(actor, amount) {
+  track(actor);
   const hp = actor.system.attributes.hp;
   const next = Math.min(hp.max, hp.value + amount);
   await actor.update({ "system.attributes.hp.value": next });
@@ -66,6 +71,7 @@ export async function healActor(actor, amount) {
 
 /** Наложить эффект (Item type=effect) на актёра. */
 export async function addEffect(actor, effectDoc, { duration } = {}) {
+  track(actor);
   const data = effectDoc.toObject();
   delete data._id;
   foundry.utils.setProperty(data, "_stats.compendiumSource", effectDoc.uuid);
@@ -79,6 +85,7 @@ export async function addEffect(actor, effectDoc, { duration } = {}) {
 /** Обёртка: урон из карточки урона pf2e (с учётом степени успеха базового спасброска). */
 export async function applyRollDamage(actor, token, roll, multiplier, { item, rollOptions } = {}) {
   if (multiplier === 0) return { dealt: 0, skipped: "крит. успех спасброска" };
+  track(actor);
   const damage = multiplier === 1 ? roll : roll.alter(multiplier, 0);
   const before = actor.system.attributes.hp?.value;
   await actor.applyDamage({ damage, token, item, rollOptions: rollOptions ?? new Set() });

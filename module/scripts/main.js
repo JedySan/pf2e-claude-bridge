@@ -9,6 +9,8 @@ import { forgeHandlers } from "./handlers/forge.js";
 import { playHandlers } from "./handlers/play.js";
 import { registerAutomationSettings, registerAutomationHooks } from "./automation.js";
 import { createIndicator } from "./indicator.js";
+import { undoGroup } from "./undo.js";
+import { registerChatButtons } from "./chat-buttons.js";
 
 const HANDLERS = { ...sceneHandlers, ...encounterHandlers, ...statusHandlers, ...forgeHandlers, ...playHandlers };
 const RECONNECT_MS = 5000;
@@ -42,6 +44,7 @@ Hooks.once("init", () => {
   // но применяет эффекты только активный ГМ.
   registerAutomationSettings();
   registerAutomationHooks();
+  registerChatButtons();
 });
 
 Hooks.once("ready", () => {
@@ -157,7 +160,8 @@ async function handleRequest({ id, method, params }) {
     return reply({ ok: false, error: `Модуль не знает команду «${method}» — обновите модуль в Foundry до версии сервера.` });
   }
   try {
-    reply({ ok: true, result: await handler(params ?? {}) });
+    const label = `Claude: ${method}${params?.tokens ? " → " + [].concat(params.tokens).join(", ") : ""}`;
+    reply({ ok: true, result: await undoGroup(label, () => handler(params ?? {})) });
   } catch (e) {
     console.error(`[${MODULE_ID}] ${method}`, e);
     reply({ ok: false, error: e?.message ?? String(e) });

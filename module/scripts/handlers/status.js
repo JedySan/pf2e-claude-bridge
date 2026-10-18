@@ -3,6 +3,7 @@ import { requireScene, conditionsOf, hpOf } from "../util.js";
 import { summarizeMessage } from "../chat.js";
 import { takeQueue } from "../queue.js";
 import { setCondition, damageActor, healActor, addEffect } from "../pf2e-ops.js";
+import { track, undo, undoHistory } from "../undo.js";
 
 let lastChatId = null;
 
@@ -124,7 +125,7 @@ export const statusHandlers = {
     const results = [];
     for (const t of findTokens(s, tokens)) {
       const ids = (t.actor.itemTypes.effect ?? []).filter((e) => e.id === name || e.name.toLowerCase().includes(q)).map((e) => e.id);
-      if (ids.length) await t.actor.deleteEmbeddedDocuments("Item", ids);
+      if (ids.length) { track(t.actor); await t.actor.deleteEmbeddedDocuments("Item", ids); }
       results.push({ ...tokenState(t), removed: ids.length });
     }
     return { tokens: results };
@@ -177,6 +178,18 @@ export const statusHandlers = {
     const msg = await ChatMessage.create(data);
     return { id: msg.id, to, speaker: speaker.alias };
   },
+
+  "undo": async ({ id, steps = 1 }) => {
+    const done = [];
+    for (let i = 0; i < (id ? 1 : steps); i++) {
+      const r = await undo(id ? { id } : {});
+      if (!r) break;
+      done.push(r);
+    }
+    return { undone: done, left: undoHistory(5) };
+  },
+
+  "undo-history": async ({ limit = 10 }) => ({ history: undoHistory(limit) }),
 
   "get-token-state": async ({ scene, tokens }) => {
     const s = requireScene(scene);
