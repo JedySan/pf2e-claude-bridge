@@ -613,8 +613,12 @@ const creatureSpec = z.object({
     actions: z.enum(["passive", "free", "reaction", "1", "2", "3"]).optional(),
     traits: z.array(z.string()).optional().describe("Трейты pf2e (ключи): aura, emotion, fear, mental, water… Для своих способностей указывайте всегда"),
     description: z.string().optional().describe("Текст своей способности (по-русски)"),
+    key: z.string().optional(),
+    auraRadius: z.number().int().optional().describe("Радиус ауры в футах, если есть тег aura"),
   })).optional()
     .describe("Способности: из компендиумов pf2e по названию (Grab, Reactive Strike, Knockdown…) или свои — custom:true, с actions, traits и description."),
+  template: z.enum(["elite", "weak", "undead", "aquatic", "fiery", "icy", "shadow"]).optional().describe("Шаблон, наложить после создания"),
+  loot: z.enum(["boss", "regular"]).optional().describe("Добыча по таблице сокровищ GM Core"),
 });
 
 tool(
@@ -635,6 +639,39 @@ tool(
   "Открыть у ГМа мастер Кузни существ с готовой заготовкой. ГМ проверит, поправит и создаст сам. " +
   "Предпочтительный способ: ГМ сохраняет контроль.",
   { spec: creatureSpec }
+);
+
+tool(
+  "forge-template",
+  "Наложить шаблон Кузни на готового NPC: elite, weak (корректировки pf2e), undead (нежить), aquatic (водное), " +
+  "fiery (огненное), icy (ледяное), shadow (теневое). IWR — по таблице GM Core, способности шаблона — с тегами. " +
+  "copy=true — на копию.",
+  {
+    actorId: z.string().describe("ID или точное имя актёра мира"),
+    template: z.enum(["elite", "weak", "undead", "aquatic", "fiery", "icy", "shadow"]),
+    copy: z.boolean().optional(),
+  }
+);
+
+tool(
+  "forge-loot",
+  "Положить NPC добычу по таблице сокровищ GM Core: boss — магический предмет и расходник его уровня + монеты (~8% бюджета уровня), " +
+  "regular — расходник и немного монет. Предметы обычной редкости, с русским переводом.",
+  {
+    actorId: z.string().describe("ID или точное имя актёра мира"),
+    kind: z.enum(["boss", "regular"]).optional(),
+    level: z.number().int().min(0).max(20).optional().describe("Уровень добычи; по умолчанию — уровень существа"),
+  }
+);
+
+tool(
+  "forge-role-abilities",
+  "Готовые способности для роли Кузни с числами под уровень (КС, урон) и тегами — их можно передать в forge-create/forge-open " +
+  "в abilities как есть. Также список шаблонов.",
+  {
+    role: z.enum(["balanced", "brute", "soldier", "skirmisher", "sniper", "magicalStriker", "spellcaster", "skillParagon"]),
+    level: z.number().int().min(-1).max(24),
+  }
 );
 
 tool(

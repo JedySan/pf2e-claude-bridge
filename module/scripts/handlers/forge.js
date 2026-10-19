@@ -7,6 +7,12 @@ function forgeApi() {
   return mod.api;
 }
 
+function findActor(ref) {
+  const actor = game.actors.get(ref) ?? game.actors.getName(ref);
+  if (!actor) throw new Error(`Актёр не найден: ${ref}`);
+  return actor;
+}
+
 /** Если указана роль — сначала шаблон роли, потом поверх явные поля спецификации. */
 function withRole(api, spec) {
   if (!spec.role) return spec;
@@ -51,6 +57,28 @@ export const forgeHandlers = {
     if (!actor) throw new Error(`Актёр не найден: ${actorId}`);
     const r = await api.rescale(actor, level, { copy });
     return { actorId: r.actor.id, name: r.actor.name, from: r.from, to: r.to, changes: r.changes };
+  },
+
+  "forge-template": async ({ actorId, template, copy = false }) => {
+    const api = forgeApi();
+    if (!api.applyTemplate) throw new Error("Обновите Кузню существ до 1.0 (шаблоны)");
+    const actor = findActor(actorId);
+    const r = await api.applyTemplate(actor, template, { copy });
+    return { actorId: r.actor.id, name: r.actor.name, template, changes: r.changes };
+  },
+
+  "forge-loot": async ({ actorId, kind = "boss", level }) => {
+    const api = forgeApi();
+    if (!api.addLoot) throw new Error("Обновите Кузню существ до 1.0 (добыча)");
+    const actor = findActor(actorId);
+    const r = await api.addLoot(actor, { kind, level });
+    return { name: actor.name, ...r };
+  },
+
+  "forge-role-abilities": async ({ role, level }) => {
+    const api = forgeApi();
+    if (!api.roleAbilities) throw new Error("Обновите Кузню существ до 1.0");
+    return { role, level, abilities: api.roleAbilities(role, level), templates: api.templates?.() };
   },
 
   "forge-create": async ({ spec }) => {
