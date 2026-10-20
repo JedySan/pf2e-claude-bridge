@@ -19,11 +19,19 @@ const toCell = (g, x, y) => [(x - g.x0) / g.size, (y - g.y0) / g.size];
 
 async function loadImage(src) {
   if (!src) throw new Error("У сцены нет фоновой картинки");
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.src = foundry.utils.getRoute?.(src) ?? src;
-  await img.decode();
-  return img;
+  // Путь может прийти и закодированным (%20), и «как есть» (кириллица, пробелы) — нормализуем.
+  let path = src;
+  try { path = decodeURI(src); } catch { /* уже в обычном виде */ }
+  const url = foundry.utils.getRoute?.(encodeURI(path)) ?? encodeURI(path);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`картинка не найдена (${res.status}): ${path}`);
+  const type = res.headers.get("content-type") ?? "";
+  if (!type.startsWith("image/")) throw new Error(`по пути «${path}» не картинка (${type || "неизвестный тип"})`);
+  const blob = await res.blob();
+  let bmp;
+  try { bmp = await createImageBitmap(blob); }
+  catch (e) { throw new Error(`браузер не смог прочитать картинку «${path}» (${type}, ${Math.round(blob.size / 1024)} КБ): ${e.message}. Попробуйте экспорт в PNG или JPG.`); }
+  return { image: bmp, naturalWidth: bmp.width, naturalHeight: bmp.height, src: path };
 }
 
 /** Отрезки из ломаных: [[x,y],[x,y],…] или плоский [x1,y1,x2,y2,…]. */
@@ -166,7 +174,7 @@ export const mapHandlers = {
     canvasEl.width = Math.round(r.w * g.size * k);
     canvasEl.height = Math.round(r.h * g.size * k);
     const ctx = canvasEl.getContext("2d");
-    ctx.drawImage(img, ...srcRect, 0, 0, canvasEl.width, canvasEl.height);
+    ctx.drawImage(img.image, ...srcRect, 0, 0, canvasEl.width, canvasEl.height);
     drawGridAndOverlay(ctx, scene, g, r, k, { grid, overlay });
     return {
       __image: canvasEl.toDataURL("image/jpeg", 0.85),

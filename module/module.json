@@ -2,7 +2,7 @@
   "id": "pf2e-claude-bridge",
   "title": "Умный помощник",
   "description": "Помощник ГМа для Pathfinder 2e, связанный с Claude: энкаунтеры и монстры, автоматика урона и состояний, кнопки в чате и отмена, ассистент «@Гриша» в чате игры, заклинания за персонажей, добыча и сундуки, Картограф — сцены со стенами и светом из готовых батлмап. Работает во вкладке ГМа.",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "authors": [
     {
       "name": "JedySan"
@@ -26,7 +26,7 @@
   "languages": [],
   "url": "https://github.com/JedySan/pf2e-claude-bridge",
   "manifest": "https://github.com/JedySan/pf2e-claude-bridge/releases/latest/download/module.json",
-  "download": "https://github.com/JedySan/pf2e-claude-bridge/releases/download/v0.9.3/module.zip",
+  "download": "https://github.com/JedySan/pf2e-claude-bridge/releases/download/v0.9.4/module.zip",
   "readme": "https://github.com/JedySan/pf2e-claude-bridge#readme",
   "bugs": "https://github.com/JedySan/pf2e-claude-bridge/issues"
 }
