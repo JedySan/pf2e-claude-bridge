@@ -24,7 +24,7 @@ const IMAGE_CACHE_MAX = 3;
 async function loadImage(src) {
   if (!src) throw new Error("У сцены нет фоновой картинки");
   if (imageCache.has(src)) return imageCache.get(src);
-  const img = await fetchImage(src);
+  const img = fromTextureCache(src) ?? await fetchImage(src);
   imageCache.set(src, img);
   while (imageCache.size > IMAGE_CACHE_MAX) {
     const [k, v] = imageCache.entries().next().value;
@@ -32,6 +32,18 @@ async function loadImage(src) {
     imageCache.delete(k);
   }
   return img;
+}
+
+/** Картинка, которую Foundry уже загрузил для холста (сцена открыта) — без повторного скачивания. */
+function fromTextureCache(src) {
+  try {
+    const TL = foundry.canvas?.TextureLoader ?? globalThis.TextureLoader;
+    const tex = TL?.loader?.getCache?.(src);
+    const source = tex?.baseTexture?.resource?.source ?? tex?.source?.resource;
+    const w = source?.naturalWidth ?? source?.width, h = source?.naturalHeight ?? source?.height;
+    if (source && w && h) return { image: source, naturalWidth: w, naturalHeight: h, src };
+  } catch { /* нет кэша — скачаем */ }
+  return null;
 }
 
 async function fetchImage(src) {

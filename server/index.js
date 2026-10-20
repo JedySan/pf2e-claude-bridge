@@ -17,6 +17,8 @@ const SECRET = process.env.PF2E_BRIDGE_SECRET || "";
 const ALLOWED_ORIGINS = (process.env.PF2E_BRIDGE_ORIGINS || "")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const REQUEST_TIMEOUT_MS = 30_000;
+// Карты: большая картинка может грузиться в браузер ГМа дольше.
+const timeoutFor = (method) => (method.startsWith("map-") ? 120_000 : REQUEST_TIMEOUT_MS);
 
 const log = (...a) => console.error("[pf2e-bridge]", ...a);
 
@@ -69,10 +71,10 @@ function sendRequest(sock, method, params, timeoutMs) {
 function callFoundry(method, params = {}) {
   if (mode === "primary") {
     if (!foundry || foundry.readyState !== 1) return Promise.reject(new Error(NOT_CONNECTED));
-    return sendRequest(foundry, method, params, REQUEST_TIMEOUT_MS);
+    return sendRequest(foundry, method, params, timeoutFor(method));
   }
   if (mode === "peer" && peerSocket?.readyState === 1) {
-    return sendRequest(peerSocket, method, params, REQUEST_TIMEOUT_MS + 5000);
+    return sendRequest(peerSocket, method, params, timeoutFor(method) + 5000);
   }
   return Promise.reject(new Error("Мост переподключается, повторите через пару секунд. " + NOT_CONNECTED));
 }
