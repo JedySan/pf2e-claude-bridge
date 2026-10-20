@@ -203,9 +203,15 @@ startPrimary();
 
 const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.6.3" });
 
-const asText = (data) => ({
-  content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
-});
+const asText = (data) => {
+  // Картинка от модуля (data URL в поле __image) — отдаём Claude как изображение.
+  if (data && typeof data === "object" && typeof data.__image === "string") {
+    const { __image, ...rest } = data;
+    const m = __image.match(/^data:([^;]+);base64,(.*)$/s);
+    if (m) return { content: [{ type: "image", mimeType: m[1], data: m[2] }, { type: "text", text: JSON.stringify(rest) }] };
+  }
+  return { content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }] };
+};
 
 // Обёртка: любая ошибка превращается в понятный ответ инструмента, а не в падение сервера.
 function tool(name, description, inputSchema, method = name) {
@@ -639,6 +645,71 @@ tool(
   "Открыть у ГМа мастер Кузни существ с готовой заготовкой. ГМ проверит, поправит и создаст сам. " +
   "Предпочтительный способ: ГМ сохраняет контроль.",
   { spec: creatureSpec }
+);
+
+// ---------- Картограф: батлмапы из картинок ----------
+
+const lines = (what) => z.array(z.array(z.array(z.number()).length(2)).min(2)).optional()
+  .describe(`${what}: ломаные в клетках сцены от левого верхнего угла карты, дробные допустимы — [[[x,y],[x,y],…], …]`);
+
+tool(
+  "map-create-scene",
+  "Создать сцену из картинки батлмапы (экспорт Inkarnate и т. п.), лежащей в данных Foundry: сетка подгоняется по ширине карты в клетках. " +
+  "Обычно ГМ делает это кнопкой «Карта из картинки» во вкладке сцен.",
+  {
+    src: z.string().describe("Путь к картинке в данных Foundry, например worlds/<мир>/maps/lighthouse.webp"),
+    cols: z.number().int().min(5).max(200).describe("Ширина карты в клетках"),
+    name: z.string().optional(),
+    gridFeet: z.number().optional().describe("Футов в клетке, по умолчанию 5"),
+    activate: z.boolean().optional(),
+  }
+);
+
+tool(
+  "map-view",
+  "Посмотреть карту сцены: картинка с сеткой координат клеток (подписи каждые 5 клеток) и уже поставленной разметкой поверх " +
+  "(красное — стены, синее — двери, голубое — окна, жёлтое — свет). region — увеличить участок для точной разметки. " +
+  "Порядок работы: обзор всей карты → участки по 10–15 клеток → map-apply → map-view для проверки.",
+  {
+    scene: sceneArg,
+    region: z.object({ x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }).optional()
+      .describe("Участок в клетках: левый верхний угол x,y и размер w,h"),
+    maxPx: z.number().int().min(400).max(2400).optional().describe("Размер картинки по большей стороне, по умолчанию 1600"),
+    grid: z.boolean().optional(),
+    overlay: z.boolean().optional().describe("Рисовать уже поставленные стены и свет (по умолчанию да)"),
+  }
+);
+
+tool(
+  "map-apply",
+  "Разметить сцену: стены, двери, тайные двери, окна (не пройти, но видно), низкие стены/ограды, невидимые границы (обрыв, вода) и свет. " +
+  "Координаты — в клетках от левого верхнего угла карты; стены ставить по середине нарисованной стены, двери — отрезком по проёму. " +
+  "replace=true — сначала убрать прошлую разметку Картографа.",
+  {
+    scene: sceneArg,
+    walls: lines("Стены"),
+    doors: lines("Двери"),
+    secretDoors: lines("Тайные двери"),
+    windows: lines("Окна"),
+    lowWalls: lines("Низкие стены и ограды"),
+    invisible: lines("Невидимые границы"),
+    lights: z.array(z.object({
+      x: z.number(), y: z.number(),
+      kind: z.enum(["torch", "fireplace", "candle", "magic"]).optional(),
+      bright: z.number().optional(), dim: z.number().optional(), color: z.string().optional(),
+    })).optional().describe("Источники света в клетках: факелы, камины, свечи, магия"),
+    replace: z.boolean().optional(),
+  }
+);
+
+tool(
+  "map-clear",
+  "Убрать разметку со сцены: по умолчанию только поставленную Картографом; all=true — все стены/свет сцены.",
+  {
+    scene: sceneArg,
+    what: z.array(z.enum(["walls", "lights"])).optional(),
+    all: z.boolean().optional(),
+  }
 );
 
 tool(

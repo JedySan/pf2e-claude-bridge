@@ -7,12 +7,14 @@ import { encounterHandlers } from "./handlers/encounter.js";
 import { statusHandlers } from "./handlers/status.js";
 import { forgeHandlers } from "./handlers/forge.js";
 import { playHandlers } from "./handlers/play.js";
+import { mapHandlers } from "./handlers/maps.js";
+import { registerMapsUI } from "./maps-ui.js";
 import { registerAutomationSettings, registerAutomationHooks } from "./automation.js";
 import { createIndicator } from "./indicator.js";
 import { undoGroup } from "./undo.js";
 import { registerChatButtons } from "./chat-buttons.js";
 
-const HANDLERS = { ...sceneHandlers, ...encounterHandlers, ...statusHandlers, ...forgeHandlers, ...playHandlers };
+const HANDLERS = { ...sceneHandlers, ...encounterHandlers, ...statusHandlers, ...forgeHandlers, ...playHandlers, ...mapHandlers };
 const RECONNECT_MS = 5000;
 
 let socket = null;
@@ -45,6 +47,7 @@ Hooks.once("init", () => {
   registerAutomationSettings();
   registerAutomationHooks();
   registerChatButtons();
+  registerMapsUI();
 });
 
 Hooks.once("ready", () => {
