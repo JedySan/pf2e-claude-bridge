@@ -683,6 +683,7 @@ tool(
     scene: sceneArg,
     cols: z.number().min(5).max(200).optional(),
     cellPx: z.number().min(50).optional(),
+    fit: z.boolean().optional().describe("Подогнать размер сцены под целое число клеток, чтобы сетка точно легла на рисунок (по умолчанию да; делать до разметки)"),
   }
 );
 

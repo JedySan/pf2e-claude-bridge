@@ -195,14 +195,23 @@ export const mapHandlers = {
         : "Дальше: map-view, чтобы посмотреть карту с сеткой, и map-apply с разметкой." };
   },
 
-  "map-set-grid": async ({ scene: ref, cols, cellPx }) => {
+  "map-set-grid": async ({ scene: ref, cols, cellPx, fit = true }) => {
     const scene = requireScene(ref);
-    const W = scene.width;
-    const size = Math.round(cellPx ?? W / cols);
+    const W = scene.width, H = scene.height;
+    const exact = cellPx ?? W / cols;
+    const size = Math.round(exact);
     if (!(size >= 50)) throw new Error(`Клетка ${size} px — меньше минимума Foundry (50 px)`);
-    // Стены и свет хранятся в пикселях — при смене сетки остаются на своих местах на картинке.
-    await scene.update({ "grid.size": size });
-    return { scene: scene.name, grid: `${size} px`, cells: `${(W / size).toFixed(1)}×${(scene.height / size).toFixed(1)}` };
+    const update = { "grid.size": size };
+    // Foundry хранит клетку целым числом пикселей: 4096 / 40 = 102.4 → 102, и к краю карты сетка «уползает».
+    // fit: чуть растягиваем/сжимаем сцену до целого числа клеток — картинка подстроится, сетка совпадёт с рисунком.
+    if (fit) {
+      const c = Math.round(W / exact), r = Math.round(H / exact);
+      update.width = c * size;
+      update.height = r * size;
+    }
+    // Стены и свет хранятся в пикселях — при смене сетки без fit остаются на местах.
+    await scene.update(update);
+    return { scene: scene.name, grid: `${size} px`, cells: `${(scene.width / size).toFixed(2)}×${(scene.height / size).toFixed(2)}`, size: `${scene.width}×${scene.height}` };
   },
 
   "map-view": async ({ scene: ref, region, maxPx = 1600, grid = true, overlay = true }) => {
