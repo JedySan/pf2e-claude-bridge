@@ -34,7 +34,9 @@ async function openImportDialog() {
     },
     rejectClose: false,
   });
-  if (!result?.src) return;
+  if (!result) return;
+  if (!result.src) return ui.notifications.warn("Карта из картинки: не выбрана картинка — нажмите кнопку с картинкой рядом с полем или впишите путь.");
+  ui.notifications.info("Карта из картинки: создаю сцену…");
   try {
     const r = await mapHandlers["map-create-scene"](result);
     ui.notifications.info(`Сцена «${r.name}» создана: ${r.cells} клеток по ${r.grid}${r.guessed ? " (подобрано наугад — Claude уточнит)" : ""}. Скажите Claude: «разметь карту ${r.name}».`);

@@ -653,6 +653,15 @@ const lines = (what) => z.array(z.array(z.array(z.number()).length(2)).min(2)).o
   .describe(`${what}: ломаные в клетках сцены от левого верхнего угла карты, дробные допустимы — [[[x,y],[x,y],…], …]`);
 
 tool(
+  "map-files",
+  "Найти картинки карт в данных Foundry (папка мира и папки maps/assets/uploads) — чтобы создать сцену из уже загруженной картинки.",
+  {
+    query: z.string().optional().describe("Часть имени файла"),
+    folder: z.string().optional().describe("Папка в данных Foundry, например worlds/<мир>/maps"),
+  }
+);
+
+tool(
   "map-create-scene",
   "Создать сцену из картинки батлмапы (экспорт Inkarnate и т. п.), лежащей в данных Foundry: сетка подгоняется по ширине карты в клетках. " +
   "Обычно ГМ делает это кнопкой «Карта из картинки» во вкладке сцен.",

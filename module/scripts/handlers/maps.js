@@ -91,7 +91,34 @@ function drawGridAndOverlay(ctx, scene, g, region, k, { grid, overlay }) {
   }
 }
 
+const IMG_RE = /\.(webp|png|jpe?g|avif|gif)$/i;
+
+/** Обойти папки данных Foundry и найти картинки (по части имени). */
+async function findImages(query, roots, depth = 3, limit = 40) {
+  const FP = foundry.applications.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
+  const out = [];
+  const q = (query ?? "").toLowerCase();
+  const walk = async (dir, d) => {
+    if (out.length >= limit) return;
+    let res;
+    try { res = await FP.browse("data", dir); } catch { return; }
+    for (const f of res.files ?? []) {
+      if (IMG_RE.test(f) && (!q || decodeURIComponent(f).toLowerCase().includes(q))) out.push(decodeURIComponent(f));
+    }
+    if (d > 0) for (const sub of res.dirs ?? []) await walk(sub, d - 1);
+  };
+  for (const r of roots) await walk(r, depth);
+  return out.slice(0, limit);
+}
+
 export const mapHandlers = {
+  "map-files": async ({ query, folder }) => {
+    const roots = folder ? [folder] : [`worlds/${game.world.id}`, "maps", "assets", "uploads", ""];
+    const files = await findImages(query, roots, folder ? 3 : 2);
+    return { files, note: files.length ? "Путь из списка — в map-create-scene (src)." : "Картинок не нашлось — уточните папку (folder) или часть имени (query)." };
+  },
+
+
   "map-create-scene": async ({ name, src, cols, gridFeet = 5, activate = false }) => {
     const img = await loadImage(src);
     const W = img.naturalWidth, H = img.naturalHeight;
