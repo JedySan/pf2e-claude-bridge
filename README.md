@@ -1,4 +1,6 @@
-# PF2e Claude Bridge
+# Умный помощник
+
+*(репозиторий и ID модуля — `pf2e-claude-bridge`, прежнее название — PF2e Claude Bridge)*
 
 Свой коннектор Claude ↔ Foundry VTT для системы **Pathfinder 2e**. Claude (через Claude Desktop и MCP)
 читает мир, строит энкаунтеры и ведёт монстров в бою.
@@ -24,7 +26,7 @@ Claude Desktop ──stdio/MCP──▶ server/ (ваш компьютер) ─�
 https://github.com/JedySan/pf2e-claude-bridge/releases/latest/download/module.json
 ```
 
-Включить **PF2e Claude Bridge** в мире. Обновления Foundry будет подтягивать сам.
+Включить **Умный помощник** в мире. Обновления Foundry будет подтягивать сам.
 
 ### 2. MCP-сервер на компьютере
 
@@ -59,8 +61,8 @@ Settings → Developer → **Edit Config**, в `mcpServers` добавить:
 
 ### 4. Связать модуль с сервером
 
-В Foundry: **Configure Settings → Module Settings → PF2e Claude Bridge** → вставить тот же секрет.
-Появится уведомление «Claude Bridge: подключено».
+В Foundry: **Configure Settings → Module Settings → Умный помощник** → вставить тот же секрет.
+Появится уведомление «Умный помощник: подключено».
 
 > Открывайте мир в **Chrome / Edge / Firefox**. Safari не пускает страницу с сервера к `127.0.0.1`.
 > Chrome один раз спросит доступ к локальной сети — разрешить.
@@ -116,7 +118,7 @@ Settings → Developer → **Edit Config**, в `mcpServers` добавить:
 ## Автоматика
 
 Работает сама, без Claude, — у активного ГМа (чтобы ничего не применялось дважды).
-Каждая функция включается в **Module Settings → PF2e Claude Bridge**.
+Каждая функция включается в **Module Settings → Умный помощник**.
 
 | Настройка | Что делает | По умолчанию |
 |---|---|---|

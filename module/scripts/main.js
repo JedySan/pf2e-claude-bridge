@@ -1,4 +1,4 @@
-// PF2e Claude Bridge — клиентская часть.
+// Умный помощник — клиентская часть.
 // Работает только у ГМа: подключается к локальному MCP-серверу по WebSocket
 // и выполняет его команды через API Foundry / pf2e.
 import { MODULE_ID } from "./util.js";
@@ -56,15 +56,15 @@ Hooks.once("ready", () => {
 
   if (!game.user.isGM) return;
   if (game.system.id !== "pf2e") {
-    ui.notifications.warn("PF2e Claude Bridge рассчитан на систему pf2e — часть инструментов не будет работать.");
+    ui.notifications.warn("Умный помощник рассчитан на систему pf2e — часть инструментов не будет работать.");
   }
   createIndicator(() => {
-    ui.notifications.info("Claude Bridge: переподключаюсь…");
+    ui.notifications.info("Умный помощник: переподключаюсь…");
     reconnect();
   }, (on) => {
     // Тот же флаг, что «Подключаться к Claude» в настройках: onChange сам переподключит или отключит.
     game.settings.set(MODULE_ID, "enabled", on);
-    ui.notifications.info(on ? "Claude Bridge: связь включена" : "Claude Bridge: связь выключена — автоматика работает дальше");
+    ui.notifications.info(on ? "Умный помощник: связь включена" : "Умный помощник: связь выключена — автоматика работает дальше");
   });
   connect();
 });
@@ -78,7 +78,7 @@ function setStatus(s, note) {
   status = s;
   Hooks.callAll(`${MODULE_ID}.status`, s);
   // Уведомление — только при первом подключении и при потере связи; дальше хватает плашки.
-  if (s === "connected" && !everConnected) ui.notifications.info("Claude Bridge: подключено");
+  if (s === "connected" && !everConnected) ui.notifications.info("Умный помощник: подключено");
   if (s === "connected") everConnected = true;
   if (s === "error" && note) console.warn(`[${MODULE_ID}]`, note);
 }
@@ -89,7 +89,7 @@ function connect() {
 
   const secret = game.settings.get(MODULE_ID, "secret");
   if (!secret) {
-    ui.notifications.warn("Claude Bridge: задайте секрет в настройках модуля.");
+    ui.notifications.warn("Умный помощник: задайте секрет в настройках модуля.");
     return setStatus("off");
   }
 
@@ -132,10 +132,10 @@ function connect() {
     if (!current()) return;
     socket = null;
     if (ev.code === 4003) {
-      ui.notifications.error("Claude Bridge: неверный секрет — проверьте настройки модуля.");
+      ui.notifications.error("Умный помощник: неверный секрет — проверьте настройки модуля.");
       return setStatus("error", "bad secret");
     }
-    if (status === "connected") ui.notifications.warn("Claude Bridge: связь потеряна, переподключаюсь…");
+    if (status === "connected") ui.notifications.warn("Умный помощник: связь потеряна, переподключаюсь…");
     setStatus("connecting");
     scheduleReconnect();
   });

@@ -49,7 +49,7 @@ function button(text, title, onClick, cls = "") {
     b.disabled = true;
     try { await onClick(); } catch (e) {
       console.error(`[${MODULE_ID}] кнопка чата`, e);
-      ui.notifications.error(`Claude Bridge: ${e.message}`);
+      ui.notifications.error(`Умный помощник: ${e.message}`);
     } finally { b.disabled = false; }
   });
   return b;

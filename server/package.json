@@ -1,6 +1,6 @@
 {
   "name": "pf2e-claude-bridge",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "MCP-сервер: мост между Claude и Foundry VTT (система pf2e)",
   "type": "module",
   "bin": { "pf2e-claude-bridge": "index.js" },
