@@ -17,8 +17,24 @@ function geom(scene) {
 const toPx = (g, x, y) => [Math.round(g.x0 + x * g.size), Math.round(g.y0 + y * g.size)];
 const toCell = (g, x, y) => [(x - g.x0) / g.size, (y - g.y0) / g.size];
 
+// Картинки карт держим в памяти: map-view по участкам не скачивает 4К-файл заново каждый раз.
+const imageCache = new Map();
+const IMAGE_CACHE_MAX = 3;
+
 async function loadImage(src) {
   if (!src) throw new Error("У сцены нет фоновой картинки");
+  if (imageCache.has(src)) return imageCache.get(src);
+  const img = await fetchImage(src);
+  imageCache.set(src, img);
+  while (imageCache.size > IMAGE_CACHE_MAX) {
+    const [k, v] = imageCache.entries().next().value;
+    v.image?.close?.();
+    imageCache.delete(k);
+  }
+  return img;
+}
+
+async function fetchImage(src) {
   // Путь может прийти и закодированным (%20), и «как есть» (кириллица, пробелы) — нормализуем.
   let path = src;
   try { path = decodeURI(src); } catch { /* уже в обычном виде */ }
@@ -119,9 +135,37 @@ async function findImages(query, roots, depth = 3, limit = 40) {
   return out.slice(0, limit);
 }
 
+/** Вырезать из отрезка стены участки, совпадающие (с допуском) с дверями/окнами. Координаты в клетках. */
+export function cutSegment([ax, ay, bx, by], cuts, tol = 0.2) {
+  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+  if (!L2) return [];
+  const proj = (x, y) => {
+    const t = ((x - ax) * dx + (y - ay) * dy) / L2;
+    return [t, Math.hypot(x - (ax + t * dx), y - (ay + t * dy))];
+  };
+  const spans = [];
+  for (const [cx, cy, ex, ey] of cuts) {
+    const [t1, d1] = proj(cx, cy), [t2, d2] = proj(ex, ey);
+    if (d1 > tol || d2 > tol) continue;
+    const lo = Math.min(t1, t2), hi = Math.max(t1, t2);
+    if (hi > 0.001 && lo < 0.999) spans.push([Math.max(lo, 0), Math.min(hi, 1)]);
+  }
+  if (!spans.length) return [[ax, ay, bx, by]];
+  spans.sort((a, b) => a[0] - b[0]);
+  const P = (t) => [ax + dx * t, ay + dy * t];
+  const out = [];
+  let t = 0;
+  for (const [lo, hi] of spans) {
+    if (lo - t > 0.005) out.push([...P(t), ...P(lo)]);
+    t = Math.max(t, hi);
+  }
+  if (1 - t > 0.005) out.push([...P(t), ...P(1)]);
+  return out;
+}
+
 export const mapHandlers = {
   "map-files": async ({ query, folder }) => {
-    const roots = folder ? [folder] : [`worlds/${game.world.id}`, "maps", "assets", "uploads", ""];
+    const roots = folder ? [folder] : [`worlds/${game.world.id}`, "maps", "Maps", "assets", "uploads"];
     const files = await findImages(query, roots, folder ? 3 : 2);
     return { files, note: files.length ? "Путь из списка — в map-create-scene (src)." : "Картинок не нашлось — уточните папку (folder) или часть имени (query)." };
   },
@@ -196,7 +240,10 @@ export const mapHandlers = {
         docs.push({ c: [...toPx(g, x1, y1), ...toPx(g, x2, y2)], ...T[type], flags: FLAG });
       }
     };
-    add(walls, "wall"); add(doors, "door"); add(secretDoors, "secret"); add(windows, "window"); add(lowWalls, "low"); add(invisible, "invisible");
+    // Стена, проходящая по окну или двери, перекрыла бы их — вырезаем такие участки из стен.
+    const cuts = [...segments(doors), ...segments(secretDoors), ...segments(windows)];
+    const wallSegs = segments(walls).flatMap((sg) => cutSegment(sg, cuts));
+    add(wallSegs, "wall"); add(doors, "door"); add(secretDoors, "secret"); add(windows, "window"); add(lowWalls, "low"); add(invisible, "invisible");
     const created = docs.length ? await scene.createEmbeddedDocuments("Wall", docs) : [];
     const lightDocs = lights.map((l) => {
       const [x, y] = toPx(g, l.x, l.y);
