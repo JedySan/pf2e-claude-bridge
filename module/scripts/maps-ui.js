@@ -13,7 +13,7 @@ async function openImportDialog() {
       <div class="form-group"><label>Картинка</label>
         <div class="form-fields"><input type="text" name="src" placeholder="worlds/…/maps/map.webp">
         <button type="button" class="pcb-pick" title="Выбрать или загрузить"><i class="fa-solid fa-file-image"></i></button></div></div>
-      <div class="form-group"><label>Ширина, клеток</label><input type="number" name="cols" value="40" min="5" max="200"></div>
+      <div class="form-group"><label>Ширина, клеток</label><input type="number" name="cols" placeholder="не знаю — подберёт Claude" min="5" max="200"></div>
       <div class="form-group"><label>Название сцены</label><input type="text" name="name" placeholder="по имени файла"></div>
       <div class="form-group"><label>Сразу активировать</label><input type="checkbox" name="activate"></div>`,
     render: (event, dialog) => {
@@ -27,7 +27,7 @@ async function openImportDialog() {
       label: "Создать сцену", icon: "fa-solid fa-map",
       callback: (e, b) => ({
         src: b.form.elements.src.value.trim(),
-        cols: b.form.elements.cols.valueAsNumber,
+        cols: Number.isFinite(b.form.elements.cols.valueAsNumber) ? b.form.elements.cols.valueAsNumber : undefined,
         name: b.form.elements.name.value.trim(),
         activate: b.form.elements.activate.checked,
       }),
@@ -37,7 +37,7 @@ async function openImportDialog() {
   if (!result?.src) return;
   try {
     const r = await mapHandlers["map-create-scene"](result);
-    ui.notifications.info(`Сцена «${r.name}» создана: ${r.cells} клеток по ${r.grid}. Скажите Claude: «разметь карту ${r.name}».`);
+    ui.notifications.info(`Сцена «${r.name}» создана: ${r.cells} клеток по ${r.grid}${r.guessed ? " (подобрано наугад — Claude уточнит)" : ""}. Скажите Claude: «разметь карту ${r.name}».`);
   } catch (e) {
     ui.notifications.error(`Карта из картинки: ${e.message}`);
   }

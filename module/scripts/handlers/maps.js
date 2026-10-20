@@ -95,6 +95,9 @@ export const mapHandlers = {
   "map-create-scene": async ({ name, src, cols, gridFeet = 5, activate = false }) => {
     const img = await loadImage(src);
     const W = img.naturalWidth, H = img.naturalHeight;
+    // Ширина неизвестна — ~100 px на клетку (так экспортирует большинство редакторов); Claude уточнит по карте.
+    const guessed = !cols;
+    if (guessed) cols = Math.max(5, Math.round(W / 100));
     const size = Math.round(W / cols);
     if (size < 50) throw new Error(`Слишком мелкая клетка: ${size} px (картинка ${W}×${H}, ${cols} клеток). Минимум в Foundry — 50 px.`);
     const scene = await Scene.implementation.create({
@@ -107,7 +110,20 @@ export const mapHandlers = {
     });
     if (activate) await scene.activate();
     return { sceneId: scene.id, name: scene.name, image: `${W}×${H}`, grid: `${size} px`, cells: `${(W / size).toFixed(1)}×${(H / size).toFixed(1)}`,
-      note: "Дальше: map-view, чтобы посмотреть карту с сеткой, и map-apply с разметкой." };
+      guessed: guessed || undefined,
+      note: guessed
+        ? "Ширина в клетках подобрана наугад (~100 px на клетку). Проверьте map-view: дверь ≈ 1 клетка, кровать ≈ 1×2, коридор 1–2 клетки; при необходимости map-set-grid."
+        : "Дальше: map-view, чтобы посмотреть карту с сеткой, и map-apply с разметкой." };
+  },
+
+  "map-set-grid": async ({ scene: ref, cols, cellPx }) => {
+    const scene = requireScene(ref);
+    const W = scene.width;
+    const size = Math.round(cellPx ?? W / cols);
+    if (!(size >= 50)) throw new Error(`Клетка ${size} px — меньше минимума Foundry (50 px)`);
+    // Стены и свет хранятся в пикселях — при смене сетки остаются на своих местах на картинке.
+    await scene.update({ "grid.size": size });
+    return { scene: scene.name, grid: `${size} px`, cells: `${(W / size).toFixed(1)}×${(scene.height / size).toFixed(1)}` };
   },
 
   "map-view": async ({ scene: ref, region, maxPx = 1600, grid = true, overlay = true }) => {

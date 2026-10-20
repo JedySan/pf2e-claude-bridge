@@ -658,10 +658,22 @@ tool(
   "Обычно ГМ делает это кнопкой «Карта из картинки» во вкладке сцен.",
   {
     src: z.string().describe("Путь к картинке в данных Foundry, например worlds/<мир>/maps/lighthouse.webp"),
-    cols: z.number().int().min(5).max(200).describe("Ширина карты в клетках"),
+    cols: z.number().int().min(5).max(200).optional().describe("Ширина карты в клетках; не знаете — не указывайте (~100 px на клетку), потом уточнить map-set-grid"),
     name: z.string().optional(),
     gridFeet: z.number().optional().describe("Футов в клетке, по умолчанию 5"),
     activate: z.boolean().optional(),
+  }
+);
+
+tool(
+  "map-set-grid",
+  "Поменять сетку сцены-карты: cols — сколько клеток по ширине (или cellPx — размер клетки в пикселях картинки). " +
+  "Как подобрать: на map-view дверь ≈ 1 клетка, кровать ≈ 1×2, стол на 4 места ≈ 2×1, коридор 1–2 клетки, плитка пола часто совпадает с клетками. " +
+  "Стены и свет на картинке остаются на местах.",
+  {
+    scene: sceneArg,
+    cols: z.number().min(5).max(200).optional(),
+    cellPx: z.number().min(50).optional(),
   }
 );
 
