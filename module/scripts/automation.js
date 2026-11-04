@@ -6,6 +6,7 @@ import { ctxOf, targetsOf, originItem, actionSlug, OUTCOME_RU } from "./chat.js"
 import { setCondition, applyRollDamage, healActor } from "./pf2e-ops.js";
 import { undoGroup, track } from "./undo.js";
 import { enqueue } from "./queue.js";
+import { recordRolls, handleStatsCommand } from "./stats.js";
 import { DEFAULT_COMBINE_ACTIONS, isCombineAction, armCombine, noteAttack, takeDamage, combinedFormula, groupByTarget } from "./combine.js";
 
 const isActiveGM = () => game.users.activeGM?.isSelf ?? game.user.isGM;
@@ -119,6 +120,7 @@ export function registerAutomationHooks() {
 
   Hooks.on("createChatMessage", (msg) => {
     if (!isActiveGM()) return;
+    try { recordRolls(msg); } catch (e) { console.error(`[${MODULE_ID}] статистика d20`, e); }
     onChatMessage(msg).catch((e) => console.error(`[${MODULE_ID}] автоматика`, e));
   });
 
@@ -147,6 +149,8 @@ async function onChatMessage(msg) {
       const fromGM = !!msg.author?.isGM;
       // Игроки могут звать ассистента, только если ГМ это разрешил.
       if (!fromGM && setting("assistantAccess") !== "all") return;
+      // Статистика бросков — отвечает сам модуль, без Claude.
+      if (await handleStatsCommand(question, { fromGM })) return;
       if (setting("claudeQueue")) {
         enqueue("вопрос", {
           messageId: msg.id,

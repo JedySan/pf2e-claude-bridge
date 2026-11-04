@@ -4,6 +4,7 @@ import { summarizeMessage } from "../chat.js";
 import { takeQueue } from "../queue.js";
 import { setCondition, damageActor, healActor, addEffect } from "../pf2e-ops.js";
 import { track, undo, undoHistory } from "../undo.js";
+import { statsTable, postStats, resetStats } from "../stats.js";
 
 let lastChatId = null;
 
@@ -187,6 +188,13 @@ export const statusHandlers = {
       done.push(r);
     }
     return { undone: done, left: undoHistory(5) };
+  },
+
+  "roll-stats": async ({ post, reset = false }) => {
+    if (reset) { await resetStats(); return { reset: true }; }
+    if (post) return { posted: post, ...(await postStats({ to: post })) };
+    const t = statsTable();
+    return { since: t.since, rows: t.rows.map((r) => ({ ...r, avg: Number(r.avg.toFixed(2)) })) };
   },
 
   "undo-history": async ({ limit = 10 }) => ({ history: undoHistory(limit) }),

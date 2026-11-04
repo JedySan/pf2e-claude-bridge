@@ -9,6 +9,7 @@ import { forgeHandlers } from "./handlers/forge.js";
 import { playHandlers } from "./handlers/play.js";
 import { mapHandlers } from "./handlers/maps.js";
 import { registerMapsUI } from "./maps-ui.js";
+import { registerStatsSettings } from "./stats.js";
 import { registerAutomationSettings, registerAutomationHooks } from "./automation.js";
 import { createIndicator } from "./indicator.js";
 import { undoGroup } from "./undo.js";
@@ -45,6 +46,7 @@ Hooks.once("init", () => {
   // Автоматика работает и без подключения к Claude — регистрируем у всех клиентов,
   // но применяет эффекты только активный ГМ.
   registerAutomationSettings();
+  registerStatsSettings();
   registerAutomationHooks();
   registerChatButtons();
   registerMapsUI();
