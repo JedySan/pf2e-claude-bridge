@@ -203,7 +203,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.6.3" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.11.0" });
 
 const asText = (data) => {
   // Картинка от модуля (data URL в поле __image) — отдаём Claude как изображение.
@@ -325,9 +325,9 @@ tool(
   "get-actor",
   "Компактный стат-блок актёра: уровень, трейты, HP, КБ, спасброски, восприятие, скорости, " +
   "иммунитеты/слабости/сопротивления, навыки, удары (атака с MAP, урон, трейты), способности " +
-  "(стоимость действий и краткий текст), заклинания. Работает и для актёров мира, и для uuid из компендиума.",
+  "(стоимость действий и краткий текст), заклинания. Работает для актёров мира, uuid из компендиума и ID токена: по токену — статы именно этого токена, с усилением и состояниями.",
   {
-    ref: z.string().describe("ID/точное имя актёра мира или uuid из search-compendium"),
+    ref: z.string().describe("ID/точное имя актёра мира, ID токена или uuid из search-compendium"),
     descMax: z.number().int().min(0).optional().describe("Длина текста способностей (0 — без текста, по умолчанию 200)"),
   }
 );
@@ -437,13 +437,40 @@ tool(
 tool(
   "set-condition",
   "Наложить, изменить или снять состояние pf2e на токенах. value: число — точное значение " +
-  "(Испуган 2), не указано — просто наложить, 0 — снять.",
+  "(Испуган 2), не указано — просто наложить, 0 — снять. atLeast — не понижать уже имеющееся значение. " +
+  "duration — срок: снимется в начале хода того, чей ход шёл при наложении (нужен идущий бой). " +
+  "whileCondition — держится, пока на токене есть другое состояние.",
   {
     scene: sceneArg,
     tokens: tokensArg,
     condition: z.string().describe("slug (frightened, prone, off-guard…) или русское название"),
     value: z.number().int().min(0).optional(),
+    atLeast: z.boolean().optional(),
+    duration: z.object({
+      value: z.number().int().min(1),
+      unit: z.enum(["rounds", "minutes", "hours"]),
+    }).optional(),
+    whileCondition: z.string().optional().describe("slug или русское название состояния"),
   }
+);
+
+tool(
+  "roll-saves",
+  "Бросить спасбросок за токены настоящим броском Foundry, с их модификаторами и карточкой в чате. " +
+  "dc — сравнить с КС и вернуть исход. hidden — бросок виден только ГМу.",
+  {
+    scene: sceneArg,
+    tokens: tokensArg,
+    save: z.enum(["fortitude", "reflex", "will"]),
+    dc: z.number().int().optional(),
+    hidden: z.boolean().optional(),
+  }
+);
+
+tool(
+  "get-selection",
+  "Токены, которые ГМ сейчас выделил на сцене (selected), и его цели, поставленные клавишей T (targets).",
+  {}
 );
 
 tool(

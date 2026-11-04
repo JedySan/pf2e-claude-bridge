@@ -3,6 +3,8 @@ import { requireScene, conditionsOf, hpOf } from "../util.js";
 import { summarizeMessage } from "../chat.js";
 import { takeQueue } from "../queue.js";
 import { setCondition, damageActor, healActor, addEffect } from "../pf2e-ops.js";
+import { setConditionTimer, toRounds } from "../timers.js";
+import { MODULE_ID } from "../util.js";
 import { track, undo, undoHistory } from "../undo.js";
 import { statsTable, postStats, resetStats } from "../stats.js";
 
@@ -25,10 +27,17 @@ function findTokens(scene, refs) {
 function tokenState(t) {
   const a = t.actor;
   const effects = (a?.itemTypes?.effect ?? []).map((e) => e.name);
+  const timers = (a?.itemTypes?.condition ?? [])
+    .filter((c) => c.flags?.[MODULE_ID]?.timer)
+    .map((c) => {
+      const { expireRound, whileCondition } = c.flags[MODULE_ID].timer;
+      return { name: c.name, expireRound, whileCondition };
+    });
   return {
     id: t.id, name: t.name, hp: hpOf(a),
     conditions: conditionsOf(a),
     effects: effects.length ? effects : undefined,
+    timers: timers.length ? timers : undefined,
   };
 }
 
@@ -80,15 +89,52 @@ export const statusHandlers = {
     return Object.entries(types).map(([slug, key]) => `${slug} — ${game.i18n.localize(key)}`);
   },
 
-  "set-condition": async ({ scene, tokens, condition, value }) => {
+  "set-condition": async ({ scene, tokens, condition, value, atLeast = false, duration, whileCondition }) => {
     const s = requireScene(scene);
     const slug = conditionSlug(condition);
+    const whileSlug = whileCondition ? conditionSlug(whileCondition) : undefined;
+    const rounds = duration ? toRounds(duration) : undefined;
     const results = [];
+    const warnings = [];
     for (const t of findTokens(s, tokens)) {
-      await setCondition(t.actor, slug, value ?? true);
+      await setCondition(t.actor, slug, value ?? true, { atLeast });
+      if (value !== 0 && (rounds || whileSlug)) {
+        const r = await setConditionTimer(t.actor, slug, { rounds, whileCondition: whileSlug });
+        if (r.warning) warnings.push(r.warning);
+      }
       results.push(tokenState(t));
     }
-    return { condition: slug, tokens: results };
+    return { condition: slug, tokens: results, warnings: warnings.length ? warnings : undefined };
+  },
+
+  "roll-saves": async ({ scene, tokens, save, dc, hidden = false }) => {
+    const s = requireScene(scene);
+    const results = [];
+    for (const t of findTokens(s, tokens)) {
+      const stat = t.actor?.saves?.[save];
+      if (!stat) throw new Error(`${t.name}: нет спасброска ${save}`);
+      const roll = await stat.roll({
+        dc: dc === undefined ? undefined : { value: dc },
+        token: t,
+        skipDialog: true,
+        rollMode: hidden ? "gmroll" : undefined,
+      });
+      if (!roll) throw new Error(`${t.name}: бросок не состоялся`);
+      const degree = roll.degreeOfSuccess ?? roll.options?.degreeOfSuccess;
+      results.push({
+        id: t.id, name: t.name, total: roll.total, natural: roll.dice?.[0]?.total, modifier: stat.mod,
+        outcome: degree === undefined ? undefined : ["крит. провал", "провал", "успех", "крит. успех"][degree],
+      });
+    }
+    return { save, dc, results };
+  },
+
+  "get-selection": async () => {
+    const brief = (doc) => ({ ...tokenState(doc), scene: doc.parent?.name });
+    return {
+      selected: (canvas.tokens?.controlled ?? []).map((t) => brief(t.document)),
+      targets: [...game.user.targets].map((t) => brief(t.document)),
+    };
   },
 
   "search-effects": async ({ query, limit = 20 }) => {

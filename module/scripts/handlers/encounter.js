@@ -219,7 +219,12 @@ export const encounterHandlers = {
   },
 
   "get-actor": async ({ ref, descMax }) => {
-    const actor = ref?.startsWith("Compendium.") || ref?.startsWith("Actor.") ? await fromUuid(ref) : findActor(ref);
+    let actor;
+    if (ref?.startsWith("Scene.")) actor = (await fromUuid(ref))?.actor;
+    else if (ref?.startsWith("Compendium.") || ref?.startsWith("Actor.")) actor = await fromUuid(ref);
+    else actor = findActor(ref);
+    // ID токена: статы именно этого токена, с его усилением и состояниями.
+    if (!actor) actor = (canvas.scene?.tokens.get(ref) ?? game.scenes.active?.tokens.get(ref))?.actor;
     if (!actor) throw new Error(`Актёр не найден: ${ref}`);
     return statBlock(actor, { descMax });
   },

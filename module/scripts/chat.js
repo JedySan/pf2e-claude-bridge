@@ -68,9 +68,10 @@ export function summarizeMessage(msg, { raw = false } = {}) {
     dc: ctx?.dc?.value,
     outcome: ctx?.outcome ? OUTCOME_RU[ctx.outcome] ?? ctx.outcome : undefined,
     targets: targetsOf(msg).map((t) => t.name),
+    targetIds: targetsOf(msg).map((t) => t.id),
     whisper: msg.whisper?.length ? true : undefined,
   };
-  if (!out.targets.length) delete out.targets;
+  if (!out.targets.length) { delete out.targets; delete out.targetIds; }
   if (!roll && !ctx) out.text = stripHtml(msg.content, 300) || undefined;
   if (raw) out.raw = { context: ctx, origin: msg.flags?.pf2e?.origin, rolls: msg.rolls?.map((r) => r.formula) };
   return out;

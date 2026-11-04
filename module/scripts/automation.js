@@ -7,6 +7,8 @@ import { setCondition, applyRollDamage, healActor } from "./pf2e-ops.js";
 import { undoGroup, track } from "./undo.js";
 import { enqueue } from "./queue.js";
 import { recordRolls, handleStatsCommand } from "./stats.js";
+import { registerTimerHooks, setConditionTimer } from "./timers.js";
+import { DEGREE_KEYS, FEAT_RULES, degreeOf, featRuleKey, incapacitation } from "./feat-rules.js";
 import { DEFAULT_COMBINE_ACTIONS, isCombineAction, armCombine, noteAttack, takeDamage, combinedFormula, groupByTarget } from "./combine.js";
 
 const isActiveGM = () => game.users.activeGM?.isSelf ?? game.user.isGM;
@@ -84,6 +86,13 @@ export function registerAutomationSettings() {
   reg("combineActions", "Действия со сложением урона",
     "Через запятую: slug, английское или русское название умения.",
     String, DEFAULT_COMBINE_ACTIONS);
+  reg("autoStunned", "Авто: «Ошеломлён» в начале хода",
+    "Напоминание ГМу, сколько действий теряет ошеломлённое существо. «Применять» ещё и снижает значение; " +
+    "не включайте, если этим уже занимается другой модуль.",
+    String, "remind", { off: "Выключено", remind: "Только напоминать", apply: "Применять" });
+  reg("autoFeatRules", "Авто: черты по целям",
+    "Расцветание пиона и Захватывающее выступление: исход считается по КС Воли каждой цели-NPC, состояния вешаются со сроком.",
+    Boolean, true);
   reg("claudeQueue", "Очередь для Claude",
     "Складывать в очередь исходы спасбросков, действия без автоматики и обращения к ассистенту — " +
     "Claude разберёт их по запросу.",
@@ -112,6 +121,8 @@ function assistantRequest(text) {
 }
 
 export function registerAutomationHooks() {
+  registerTimerHooks();
+
   // Цели автора сохраняем в сообщении: pf2e кладёт цель не во все карточки (например, в карточку заклинания).
   Hooks.on("preCreateChatMessage", (msg) => {
     if (!game.user.targets.size) return;
@@ -178,6 +189,12 @@ async function onChatMessage(msg) {
   // 2б. Урон.
   const who = msg.speaker?.alias ?? "?";
   if (msg.isDamageRoll) return undoGroup(`${who}: ${item?.name ?? "урон"}`, () => handleDamage(msg, ctx, item), { messageId: msg.id });
+
+  // 3а. Черты с исходом по каждой цели. Выступление приходит без КС, поэтому проверка идёт до п. 3.
+  if (ctx?.type === "skill-check" && setting("autoFeatRules")) {
+    const ruleKey = featRuleKey(actionSlug(msg), ctx.options);
+    if (ruleKey) return undoGroup(`${who}: ${item?.name ?? actionSlug(msg)}`, () => handleFeatRule(msg, ruleKey), { messageId: msg.id });
+  }
 
   // 3. Действия навыков с исходом.
   if (ctx?.type === "skill-check" && ctx.outcome) return undoGroup(`${who}: ${actionSlug(msg) ?? "действие"}`, () => handleAction(msg, ctx), { messageId: msg.id });
@@ -315,6 +332,42 @@ async function handleAction(msg, ctx) {
     if (cond.startsWith("-")) await setCondition(actor, cond.slice(1), 0);
     else await setCondition(actor, cond, value ?? true, { atLeast: true });
   }
+}
+
+/** Сравнить проверку с КС Воли каждой цели-NPC и повесить состояния по исходу. */
+async function handleFeatRule(msg, key) {
+  const rule = FEAT_RULES[key];
+  const roll = msg.rolls?.[0];
+  const self = msg.actor;
+  if (!roll || !self) return;
+  const inCombat = !!game.combat?.started;
+  const natural = roll.dice?.[0]?.total;
+  const lines = [];
+  for (const token of targetsOf(msg)) {
+    const target = token.actor;
+    if (!target || target === self || !npcOnly(target)) continue;
+    const dc = target.saves?.will?.dc?.value;
+    if (!dc) continue;
+    let degree = degreeOf(roll.total, dc, natural);
+    if (rule.incapacitation(inCombat)) degree = incapacitation(degree, self.level, target.level);
+    const applied = [];
+    for (const e of rule.effects(degree, inCombat)) {
+      await setCondition(target, e.slug, e.value ?? true, { atLeast: true });
+      const r = (e.rounds || e.whileCondition)
+        ? await setConditionTimer(target, e.slug, { rounds: e.rounds, whileCondition: e.whileCondition })
+        : null;
+      applied.push(`${e.slug}${e.value ? ` ${e.value}` : ""}${r?.warning ? " (без таймера)" : ""}`);
+    }
+    const note = rule.note(degree);
+    lines.push(`${token.name} (КС ${dc}): ${OUTCOME_RU[DEGREE_KEYS[degree]]}${applied.length ? ` → ${applied.join(", ")}` : ""}${note ? `; ${note}` : ""}`);
+  }
+  if (!lines.length) return;
+  await ChatMessage.create({
+    content: `<p><b>${originItem(msg)?.name ?? "Выступление"}</b>: ${roll.total}</p>` + lines.map((l) => `<p>${l}</p>`).join(""),
+    whisper: ChatMessage.getWhisperRecipients("GM").map((u) => u.id),
+    speaker: { alias: setting("assistantName") },
+    flags: { [MODULE_ID]: { assistant: true } },
+  });
 }
 
 async function handleSave(msg, ctx, item) {
