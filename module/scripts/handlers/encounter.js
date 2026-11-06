@@ -241,7 +241,8 @@ export const encounterHandlers = {
       const update = { folder: folder.id };
       if (name || count > 1) update.name = count > 1 ? `${baseName} ${i + 1}` : baseName;
       // Штатный импорт: его перехватывают Babele / pf2e-ru и отдают переведённого актёра.
-      const actor = await game.actors.importFromCompendium(pack, src.id, update);
+      // keepId: false — иначе второй импорт того же монстра перезапишет первого (одинаковый ID).
+      const actor = await game.actors.importFromCompendium(pack, src.id, update, { keepId: false });
       if (adjustment && adjustment !== "normal") {
         if (typeof actor.applyAdjustment !== "function") throw new Error("Эта версия pf2e не поддерживает Elite/Weak через API");
         await actor.applyAdjustment(adjustment);
