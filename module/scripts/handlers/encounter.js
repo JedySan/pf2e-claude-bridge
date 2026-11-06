@@ -1,7 +1,6 @@
 // Компендиумы, актёры и бюджет энкаунтера.
 import {
-  getProp, findActor, requireScene, stripHtml, hpOf, conditionsOf, ensureEncounterFolder, encounterFolderName,
-} from "../util.js";
+  getProp, findActor, requireScene, stripHtml, hpOf, conditionsOf, ensureEncounterFolder, encounterFolderName,, ensureActorFolder } from "../util.js";
 
 // ---------- Бюджет XP (Pathfinder 2e, GM Core) ----------
 
@@ -229,11 +228,23 @@ export const encounterHandlers = {
     return statBlock(actor, { descMax });
   },
 
-  "import-actor": async ({ uuid, name, adjustment, count = 1 }) => {
+  "move-actors": async ({ ids, folder }) => {
+    const f = await ensureActorFolder(folder);
+    const moved = [];
+    for (const id of ids) {
+      const a = game.actors.get(id) ?? game.actors.getName(id);
+      if (!a) continue;
+      await a.update({ folder: f.id });
+      moved.push(a.name);
+    }
+    return { folder: f.name, moved };
+  },
+
+  "import-actor": async ({ uuid, name, adjustment, count = 1, folder: folderName }) => {
     const src = await fromUuid(uuid);
     if (!src || src.documentName !== "Actor" || !src.pack) throw new Error(`В компендиуме не найден актёр: ${uuid}`);
     const pack = game.packs.get(src.pack);
-    const folder = await ensureEncounterFolder();
+    const folder = folderName ? await ensureActorFolder(folderName) : await ensureEncounterFolder();
     const baseName = name ?? src.name;
 
     const created = [];

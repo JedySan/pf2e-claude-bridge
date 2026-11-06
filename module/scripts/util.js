@@ -91,6 +91,13 @@ export function encounterFolderName() {
   return (forge?.active && forge.api?.folderName?.()) || ENCOUNTER_FOLDER;
 }
 
+/** Папка актёров по имени (создаётся, если нет). */
+export async function ensureActorFolder(name) {
+  let folder = game.folders.find((f) => f.type === "Actor" && f.name.toLowerCase() === String(name).toLowerCase());
+  if (!folder) folder = await Folder.create({ name, type: "Actor" });
+  return folder;
+}
+
 export async function ensureEncounterFolder() {
   const forge = game.modules.get("jedysan-kuznya");
   if (forge?.active && forge.api?.ensureFolder) return forge.api.ensureFolder();
