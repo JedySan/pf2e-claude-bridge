@@ -1,6 +1,6 @@
 // Компендиумы, актёры и бюджет энкаунтера.
 import {
-  getProp, findActor, requireScene, stripHtml, hpOf, conditionsOf, ensureEncounterFolder, encounterFolderName,, ensureActorFolder } from "../util.js";
+  getProp, findActor, requireScene, stripHtml, hpOf, conditionsOf, ensureEncounterFolder, encounterFolderName, ensureActorFolder } from "../util.js";
 
 // ---------- Бюджет XP (Pathfinder 2e, GM Core) ----------
 
