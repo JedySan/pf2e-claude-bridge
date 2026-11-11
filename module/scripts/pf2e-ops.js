@@ -76,7 +76,14 @@ export async function addEffect(actor, effectDoc, { duration } = {}) {
   delete data._id;
   foundry.utils.setProperty(data, "_stats.compendiumSource", effectDoc.uuid);
   if (duration) {
-    data.system.duration = { ...(data.system.duration ?? {}), value: duration.value, unit: duration.unit, expiry: data.system.duration?.expiry ?? "turn-start" };
+    // «Без срока» и «до конца боя» в pf2e хранятся со значением −1 и без момента истечения.
+    const open = duration.unit === "unlimited" || duration.unit === "encounter";
+    data.system.duration = {
+      ...(data.system.duration ?? {}),
+      value: open ? -1 : duration.value,
+      unit: duration.unit,
+      expiry: open ? null : (data.system.duration?.expiry ?? "turn-start"),
+    };
   }
   const [created] = await actor.createEmbeddedDocuments("Item", [data]);
   return { id: created.id, name: created.name };

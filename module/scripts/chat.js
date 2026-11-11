@@ -19,6 +19,8 @@ const KIND_RU = {
   "initiative": "инициатива",
   "flat-check": "чистая проверка",
   "check": "проверка",
+  "spell-cast": "заклинание",
+  "self-effect": "действие",
 };
 
 export function ctxOf(msg) {
@@ -40,6 +42,42 @@ export function originItem(msg) {
   } catch { /* у некоторых карточек getter бросает */ }
   const uuid = msg.flags?.pf2e?.origin?.uuid;
   return uuid ? fromUuidSync(uuid) : null;
+}
+
+/**
+ * Карточка без броска: заклинание, умение, действие. У заклинаний со спасброском pf2e кладёт
+ * context.type = "spell-cast", у действий с эффектом на себя — "self-effect"; у остальных контекста нет.
+ */
+export function isCardMessage(msg) {
+  if (msg.rolls?.length) return false;
+  const type = ctxOf(msg)?.type;
+  return !type || type === "spell-cast" || type === "self-effect";
+}
+
+/** Настоящий бросок урона pf2e (а не любой бросок без d20 вроде «/r 1d4»). */
+export function isDamageMessage(msg) {
+  if (!msg.isDamageRoll || !msg.rolls?.[0]) return false;
+  if (ctxOf(msg)?.type === "damage-roll") return true;
+  const roll = msg.rolls[0];
+  return roll.constructor?.name === "DamageRoll" || roll instanceof (CONFIG.Dice.rolls.find((r) => r.name === "DamageRoll") ?? class {});
+}
+
+/**
+ * Ключи, по которым спасбросок цели связывается с уроном того же заклинания.
+ * Берём сырые данные flags.pf2e.origin (одинаковые в карточке, спасброске и уроне),
+ * а не найденный предмет: для свитков, жезлов и повышенных рангов он у каждой карточки свой.
+ */
+export function spellKeys(msg, item) {
+  const o = msg.flags?.pf2e?.origin ?? {};
+  const keys = [];
+  if (o.uuid) keys.push(`u:${o.uuid}`);
+  const slug = (o.rollOptions ?? []).find((r) => typeof r === "string" && r.startsWith("origin:item:slug:"))?.slice(17)
+    ?? item?.slug ?? null;
+  const caster = o.actor ?? item?.actor?.uuid ?? null;
+  if (slug && caster) keys.push(`s:${caster}:${slug}`);
+  else if (item?.name && caster) keys.push(`n:${caster}:${item.name.toLowerCase()}`);
+  if (!keys.length && item?.uuid) keys.push(`u:${item.uuid}`);
+  return keys;
 }
 
 /** Название действия из roll options: «action:demoralize» → demoralize. */

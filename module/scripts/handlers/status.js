@@ -117,6 +117,8 @@ export const statusHandlers = {
         dc: dc === undefined ? undefined : { value: dc },
         token: t,
         skipDialog: true,
+        // pf2e на Foundry 14 — messageMode, на 13 — rollMode.
+        messageMode: hidden ? "gm" : undefined,
         rollMode: hidden ? "gmroll" : undefined,
       });
       if (!roll) throw new Error(`${t.name}: бросок не состоялся`);

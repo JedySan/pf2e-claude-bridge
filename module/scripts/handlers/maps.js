@@ -270,9 +270,10 @@ export const mapHandlers = {
       const [x, y] = toPx(g, l.x, l.y);
       const kind = l.kind ?? "torch";
       const preset = {
-        torch: { bright: 10, dim: 20, color: "#ff9a3c", alpha: 0.35, animation: { type: "torch", speed: 3, intensity: 3 } },
+        // Радиусы в футах, как в pf2e: факел — яркий 20, тусклый ещё до 40.
+        torch: { bright: 20, dim: 40, color: "#ff9a3c", alpha: 0.35, animation: { type: "torch", speed: 3, intensity: 3 } },
         fireplace: { bright: 15, dim: 30, color: "#ff7a1a", alpha: 0.45, animation: { type: "flame", speed: 3, intensity: 4 } },
-        candle: { bright: 5, dim: 10, color: "#ffc070", alpha: 0.3, animation: { type: "torch", speed: 2, intensity: 2 } },
+        candle: { bright: 0, dim: 10, color: "#ffc070", alpha: 0.3, animation: { type: "torch", speed: 2, intensity: 2 } },
         magic: { bright: 10, dim: 20, color: "#6ad1ff", alpha: 0.4, animation: { type: "pulse", speed: 2, intensity: 3 } },
       }[kind] ?? {};
       return { x, y, config: { ...preset, ...(l.bright ? { bright: l.bright } : {}), ...(l.dim ? { dim: l.dim } : {}), ...(l.color ? { color: l.color } : {}) }, flags: FLAG };

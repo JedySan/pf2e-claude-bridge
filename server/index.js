@@ -203,7 +203,7 @@ startPrimary();
 
 // ---------- MCP ----------
 
-const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.11.0" });
+const mcp = new McpServer({ name: "pf2e-claude-bridge", version: "0.11.1" });
 
 const asText = (data) => {
   // Картинка от модуля (data URL в поле __image) — отдаём Claude как изображение.

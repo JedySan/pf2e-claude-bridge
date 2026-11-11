@@ -29,15 +29,32 @@ export function track(actor) {
   current.snaps.set(actor.uuid, { uuid: actor.uuid, name: actor.name, before: snap(actor) });
 }
 
-/** Выполнить fn как одну отменяемую операцию. Вложенные группы сливаются во внешнюю. */
+// Группы выполняются строго по очереди: автоматика срабатывает на хуки чата параллельно
+// (два броска урона подряд, ход Claude во время броска игрока), и без очереди изменения одной
+// операции попадали в чужую группу или терялись — «Отменить» тогда откатывало не то.
+let lock = Promise.resolve();
+const LOCK_WAIT_MS = 30 * 1000;
+
+function acquire() {
+  let release;
+  const mine = new Promise((r) => { release = r; });
+  const prev = lock;
+  lock = prev.then(() => mine);
+  // Страховка от зависания: если предыдущая операция не завершилась за 30 с — не ждём её.
+  const waited = Promise.race([prev, new Promise((r) => setTimeout(r, LOCK_WAIT_MS))]);
+  return waited.then(() => release);
+}
+
+/** Выполнить fn как одну отменяемую операцию. Операции идут по очереди, по одной. */
 export async function undoGroup(label, fn, { messageId } = {}) {
-  if (current) return fn();
+  const release = await acquire();
   current = { label, messageIds: [].concat(messageId ?? []), snaps: new Map() };
+  const g = current;
   try {
     return await fn();
   } finally {
-    const g = current;
-    current = null;
+    if (current === g) current = null;
+    release();
     const snaps = [...g.snaps.values()];
     for (const s of snaps) {
       const a = fromUuidSync(s.uuid);

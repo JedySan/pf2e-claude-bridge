@@ -15,6 +15,14 @@ function findTokens(scene, refs) {
   });
 }
 
+/** Выставить цели ГМа (API менялся между версиями Foundry). */
+function setTargets(tokenDocs) {
+  const ids = tokenDocs.map((t) => t.id);
+  if (typeof game.user.updateTokenTargets === "function") return game.user.updateTokenTargets(ids);
+  for (const t of game.user.targets) t.setTarget(false, { releaseOthers: false, groupSelection: true });
+  for (const d of tokenDocs) d.object?.setTarget(true, { releaseOthers: false, groupSelection: true });
+}
+
 const names = (doc) => [doc.name, doc.flags?.babele?.originalName, doc._source?.name].filter(Boolean).map((n) => n.toLowerCase());
 
 /** Данные из компендиума — с переводом Babele (pf2e-ru), если он есть. */
@@ -57,7 +65,7 @@ export const playHandlers = {
 
     const targetTokens = targets.length ? findTokens(s, targets) : [];
     if (canvas.scene?.id === s.id) {
-      game.user.updateTokenTargets(targetTokens.map((t) => t.id));
+      setTargets(targetTokens);
     } else if (targetTokens.length) {
       throw new Error(`Чтобы выбрать цели, у ГМа должна быть открыта сцена «${s.name}»`);
     }
@@ -65,17 +73,20 @@ export const playHandlers = {
     const castRank = rank ?? item.rank;
     const entry = item.spellcasting;
     let via = "карточка";
+    // pf2e при нехватке ячеек/фокуса не бросает ошибку, а молча не создаёт карточку —
+    // поэтому проверяем, появилось ли сообщение.
+    const before = game.messages.size;
     try {
       if (entry?.cast) {
         await entry.cast(item, { rank: castRank, consume: true });
         via = "заклинательная запись (с расходом ячейки/использования)";
-      } else {
-        await item.toMessage(undefined, { data: { castRank } });
       }
     } catch (e) {
-      // Нет ячеек/использований — всё равно показываем карточку, чтобы ГМ решил сам.
-      await item.toMessage(undefined, { data: { castRank } });
       via = `карточка без расхода (${e.message})`;
+    }
+    if (game.messages.size === before) {
+      await item.toMessage(undefined, { data: { castRank } });
+      if (entry?.cast && via.startsWith("заклинательная")) via = "карточка без расхода: нет ячейки, использования или очков фокуса";
     }
 
     const save = item.system?.defense?.save;

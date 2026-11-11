@@ -18,6 +18,9 @@ export function registerStatsSettings() {
   });
 }
 
+// Рабочая копия живёт в памяти, в настройку мира сохраняется с задержкой.
+// Копию не сбрасываем после сохранения: иначе броски, пришедшие, пока запись ещё идёт,
+// читали бы старое значение настройки и терялись.
 function load() {
   if (pending) return pending;
   const s = foundry.utils.deepClone(game.settings.get(MODULE_ID, KEY) ?? {});
@@ -28,9 +31,7 @@ function load() {
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    const data = pending;
-    pending = null;
-    game.settings.set(MODULE_ID, KEY, data).catch((e) => console.error(`[${MODULE_ID}] статистика`, e));
+    game.settings.set(MODULE_ID, KEY, foundry.utils.deepClone(pending)).catch((e) => console.error(`[${MODULE_ID}] статистика`, e));
   }, 1500);
 }
 

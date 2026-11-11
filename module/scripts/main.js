@@ -14,9 +14,11 @@ import { registerAutomationSettings, registerAutomationHooks } from "./automatio
 import { createIndicator } from "./indicator.js";
 import { undoGroup } from "./undo.js";
 import { registerChatButtons } from "./chat-buttons.js";
+import { restoreQueue } from "./queue.js";
 
 const HANDLERS = { ...sceneHandlers, ...encounterHandlers, ...statusHandlers, ...forgeHandlers, ...playHandlers, ...mapHandlers };
 const RECONNECT_MS = 5000;
+const UNDOABLE = new Set(["set-condition", "apply-effect", "remove-effect", "apply-damage", "heal"]);
 
 let socket = null;
 let reconnectTimer = null;
@@ -68,6 +70,7 @@ Hooks.once("ready", () => {
     game.settings.set(MODULE_ID, "enabled", on);
     ui.notifications.info(on ? "Умный помощник: связь включена" : "Умный помощник: связь выключена — автоматика работает дальше");
   });
+  restoreQueue();
   connect();
 });
 
@@ -165,8 +168,12 @@ async function handleRequest({ id, method, params }) {
     return reply({ ok: false, error: `Модуль не знает команду «${method}» — обновите модуль в Foundry до версии сервера.` });
   }
   try {
-    const label = `Claude: ${method}${params?.tokens ? " → " + [].concat(params.tokens).join(", ") : ""}`;
-    reply({ ok: true, result: await undoGroup(label, () => handler(params ?? {})) });
+    // В историю отмены — только команды, которые меняют HP, состояния и эффекты.
+    // Остальные (чтение, карты, Кузня) выполняются сразу и не ждут очереди автоматики.
+    const result = UNDOABLE.has(method)
+      ? await undoGroup(`Claude: ${method}${params?.tokens ? " → " + [].concat(params.tokens).join(", ") : ""}`, () => handler(params ?? {}))
+      : await handler(params ?? {});
+    reply({ ok: true, result });
   } catch (e) {
     console.error(`[${MODULE_ID}] ${method}`, e);
     reply({ ok: false, error: e?.message ?? String(e) });

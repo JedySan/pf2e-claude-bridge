@@ -2,7 +2,7 @@
 // Выполняется ровно у одного клиента — активного ГМа, — чтобы ничего не применялось дважды.
 // Каждая функция включается/выключается в настройках модуля.
 import { MODULE_ID } from "./util.js";
-import { ctxOf, targetsOf, originItem, actionSlug, OUTCOME_RU } from "./chat.js";
+import { ctxOf, targetsOf, originItem, actionSlug, OUTCOME_RU, isCardMessage, isDamageMessage, spellKeys } from "./chat.js";
 import { setCondition, applyRollDamage, healActor } from "./pf2e-ops.js";
 import { undoGroup, track } from "./undo.js";
 import { enqueue } from "./queue.js";
@@ -48,18 +48,57 @@ const NON_COMBAT_ACTIONS = new Set([
 
 const BASIC_SAVE_MULTIPLIER ={ criticalSuccess: 0, success: 0.5, failure: 1, criticalFailure: 2 };
 
-// Результаты спасбросков против заклинаний: «uuid заклинания|uuid токена» → исход.
+// Результаты спасбросков против заклинаний: «ключ заклинания|uuid токена» → исход.
 // Нужны, чтобы урон базового спасброска применить с правильным множителем.
+// Ключи — из spellKeys(): сырые данные origin, одинаковые в карточке, спасброске и уроне.
 const saveOutcomes = new Map();
-const SAVE_TTL_MS = 3 * 60 * 1000;
+const SAVE_TTL_MS = 5 * 60 * 1000;
 
-function rememberSave(itemUuid, tokenUuid, outcome) {
-  saveOutcomes.set(`${itemUuid}|${tokenUuid}`, { outcome, at: Date.now() });
+function rememberSave(keys, tokenUuid, outcome) {
+  for (const k of keys) saveOutcomes.set(`${k}|${tokenUuid}`, { outcome, at: Date.now() });
 }
 
-function recallSave(itemUuid, tokenUuid) {
-  const r = saveOutcomes.get(`${itemUuid}|${tokenUuid}`);
-  return r && Date.now() - r.at < SAVE_TTL_MS ? r.outcome : null;
+function recallSave(keys, tokenUuid) {
+  for (const k of keys) {
+    const r = saveOutcomes.get(`${k}|${tokenUuid}`);
+    if (r && Date.now() - r.at < SAVE_TTL_MS) return r.outcome;
+  }
+  return null;
+}
+
+// Урон заклинания, брошенный раньше, чем пришёл спасбросок цели (игрок быстро нажал «Урон»
+// или спасбросок бросают вручную): ждём спасбросок, потом применяем с нужным множителем.
+const SAVE_WAIT_MS = 2 * 60 * 1000;
+const waitingDamage = [];
+
+function waitForSave(entry) {
+  entry.timer = setTimeout(() => {
+    const i = waitingDamage.indexOf(entry);
+    if (i < 0) return;
+    waitingDamage.splice(i, 1);
+    if (setting("claudeQueue")) {
+      enqueue("урон без спасброска", { target: entry.token.name, item: entry.item?.name, total: entry.roll.total,
+        note: "спасбросок цели так и не пришёл — урон не применён" });
+    }
+  }, SAVE_WAIT_MS);
+  waitingDamage.push(entry);
+}
+
+/** Пришёл спасбросок — применить урон, который его ждал. */
+function releaseWaiting(keys, tokenUuid, outcome) {
+  for (const entry of [...waitingDamage]) {
+    if (entry.token.uuid !== tokenUuid || !entry.keys.some((k) => keys.includes(k))) continue;
+    waitingDamage.splice(waitingDamage.indexOf(entry), 1);
+    clearTimeout(entry.timer);
+    const { msg, token, roll, item, rollOptions, basic } = entry;
+    undoGroup(`${msg.speaker?.alias ?? "?"}: ${item?.name ?? "урон"}`, async () => {
+      if (!basic) {
+        if (setting("claudeQueue")) enqueue("урон: небазовый спасбросок", { target: token.name, item: item?.name, total: roll.total, outcome: OUTCOME_RU[outcome] });
+        return;
+      }
+      await applyRollDamage(token.actor, token, roll, BASIC_SAVE_MULTIPLIER[outcome] ?? 1, { item, rollOptions });
+    }, { messageId: msg.id }).catch((e) => console.error(`[${MODULE_ID}] урон после спасброска`, e));
+  }
 }
 
 export function registerAutomationSettings() {
@@ -177,8 +216,10 @@ async function onChatMessage(msg) {
     }
   }
 
+  const card = isCardMessage(msg);
+
   // 2. Карточка действия со сложением урона (Двойной разрез и т. п.) — взводим объединение.
-  if (!ctx && !msg.rolls?.length && msg.actor && setting("autoCombine") && isCombineAction(item, setting("combineActions"))) {
+  if (card && msg.actor && setting("autoCombine") && isCombineAction(item, setting("combineActions"))) {
     armCombine(msg.actor, item.name);
     return;
   }
@@ -188,7 +229,7 @@ async function onChatMessage(msg) {
 
   // 2б. Урон.
   const who = msg.speaker?.alias ?? "?";
-  if (msg.isDamageRoll) return undoGroup(`${who}: ${item?.name ?? "урон"}`, () => handleDamage(msg, ctx, item), { messageId: msg.id });
+  if (isDamageMessage(msg)) return undoGroup(`${who}: ${item?.name ?? "урон"}`, () => handleDamage(msg, ctx, item), { messageId: msg.id });
 
   // 3а. Черты с исходом по каждой цели. Выступление приходит без КС, поэтому проверка идёт до п. 3.
   if (ctx?.type === "skill-check" && setting("autoFeatRules")) {
@@ -202,8 +243,8 @@ async function onChatMessage(msg) {
   // 4. Результат спасброска.
   if (ctx?.type === "saving-throw" && ctx.outcome) return handleSave(msg, ctx, item);
 
-  // 5. Заклинание со спасброском применено к целям.
-  if (!ctx && !msg.rolls?.length && item?.type === "spell") return handleSpellCast(msg, item);
+  // 5. Заклинание со спасброском применено к целям (у таких карточек context.type = "spell-cast").
+  if (card && item?.type === "spell") return handleSpellCast(msg, item);
 }
 
 /**
@@ -248,6 +289,7 @@ async function handleDamage(msg, ctx, item) {
   if (!isHeal && item?.type !== "spell" && msg.actor && setting("autoCombine")
       && takeDamage(msg.actor, { msg, roll, targets, item, rollOptions }, flushCombined)) return;
 
+  const keys = item?.type === "spell" ? spellKeys(msg, item) : [];
   for (const token of targets) {
     if (healsTarget(roll, token.actor)) {
       await healActor(token.actor, roll.total);
@@ -255,9 +297,10 @@ async function handleDamage(msg, ctx, item) {
     }
     let multiplier = 1;
     if (item?.type === "spell" && save?.statistic) {
-      const outcome = recallSave(item.uuid, token.uuid);
+      const outcome = recallSave(keys, token.uuid);
       if (!outcome) {
-        if (setting("claudeQueue")) enqueue("урон без спасброска", { target: token.name, item: item.name, total: roll.total, note: "нет результата спасброска — урон не применён" });
+        // Спасбросок ещё не брошен — дождёмся его и применим урон тогда.
+        waitForSave({ keys, msg, token, roll, item, rollOptions, basic: !!save.basic });
         continue;
       }
       if (!save.basic) {
@@ -373,9 +416,14 @@ async function handleFeatRule(msg, key) {
 async function handleSave(msg, ctx, item) {
   const sp = msg.speaker ?? {};
   const token = msg.token ?? (sp.token ? (game.scenes.get(sp.scene) ?? canvas.scene)?.tokens.get(sp.token) : null);
-  if (item && token) rememberSave(item.uuid, token.uuid, ctx.outcome);
-  if (item && setting("claudeQueue")) {
-    enqueue("спасбросок", { who: msg.speaker?.alias, against: item.name, outcome: OUTCOME_RU[ctx.outcome], total: msg.rolls?.[0]?.total, dc: ctx.dc?.value });
+  const fromSpell = item?.type === "spell" || msg.flags?.pf2e?.origin?.type === "spell";
+  if (fromSpell && token) {
+    const keys = spellKeys(msg, item);
+    rememberSave(keys, token.uuid, ctx.outcome);
+    releaseWaiting(keys, token.uuid, ctx.outcome);
+  }
+  if ((item || fromSpell) && setting("claudeQueue")) {
+    enqueue("спасбросок", { who: msg.speaker?.alias, against: item?.name ?? msg.flags?.pf2e?.modifierName, outcome: OUTCOME_RU[ctx.outcome], total: msg.rolls?.[0]?.total, dc: ctx.dc?.value });
   }
 }
 
@@ -387,15 +435,23 @@ async function handleSpellCast(msg, spell) {
 /** Бросить спасброски NPC-целей против заклинания из карточки. Возвращает число бросков. */
 export async function rollTargetSaves(msg, spell) {
   const save = spell.system?.defense?.save;
-  if (!save?.statistic) return;
-  const dc = spell.spellcasting?.statistic?.dc?.value;
-  if (!dc) return;
+  if (!save?.statistic) return 0;
+  const sc = spell.spellcasting?.statistic;
+  // КС с учётом модификаторов именно этого заклинания — как на кнопке спасброска в карточке pf2e.
+  let dc = null;
+  try { dc = sc?.withRollOptions?.({ item: spell })?.dc?.value; } catch { /* старый pf2e */ }
+  dc ??= sc?.dc?.value;
+  if (!dc) {
+    if (setting("claudeQueue")) enqueue("спасброски не брошены", { item: spell.name, note: "не удалось определить КС заклинания" });
+    return 0;
+  }
   const targets = targetsOf(msg).filter((t) => t.actor && npcOnly(t.actor));
   let n = 0;
   for (const token of targets) {
     const stat = token.actor.saves?.[save.statistic];
     if (!stat) continue;
-    await stat.roll({ dc: { value: dc }, item: spell, origin: spell.actor, skipDialog: true });
+    // token — именно цель: у связанного актёра на сцене может быть несколько токенов.
+    await stat.roll({ dc: { value: dc }, item: spell, origin: spell.actor, token, skipDialog: true });
     n += 1;
   }
   return n;

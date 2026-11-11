@@ -5,7 +5,7 @@
 //   действие навыка — отменить то, что повесила автоматика.
 // Цели — выделенные автором в момент броска; если их нет — токены, выбранные сейчас у ГМа.
 import { MODULE_ID } from "./util.js";
-import { targetsOf, originItem, ctxOf } from "./chat.js";
+import { targetsOf, originItem, ctxOf, isCardMessage } from "./chat.js";
 import { applyRollDamage, healActor } from "./pf2e-ops.js";
 import { undoGroup, undo, hasUndoFor } from "./undo.js";
 import { healsTarget, rollTargetSaves } from "./automation.js";
@@ -110,12 +110,12 @@ function decorate(msg, html) {
       );
     }
     bar.append(undoButton(msg));
-  } else if (!msg.rolls?.length && !ctx) {
+  } else if (isCardMessage(msg)) {
     const item = originItem(msg);
     if (item?.type !== "spell" || !item.system?.defense?.save?.statistic) return;
     label("Гриша:");
     bar.append(button("🎲 Спасброски NPC", "Бросить спасброски NPC-целей против этого заклинания", async () => {
-      const n = await rollTargetSaves(msg, item);
+      const n = await rollTargetSaves(msg, originItem(msg) ?? item);
       if (!n) ui.notifications.warn("Нет NPC-целей в этой карточке (выделите цели перед сотворением).");
     }));
   } else if (ctx?.type === "skill-check" && ctx.outcome && hasUndoFor(msg.id)) {
